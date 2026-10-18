@@ -1,0 +1,97 @@
+{
+  "attempts_total": 0,
+  "base_sha": "e84b78e06706e0e63ec5c6d7034e6b4d3e44524a",
+  "delivery": null,
+  "error": {
+    "code": "run.failed",
+    "message": "the test suite does not run on the base (exit None); check [tests] command in aih.toml:\n$ /work/venv-arm/bin/python -m pytest -q -p no:cacheprovider --with-db-init -rfE airflow-core/tests/unit/models airflow-core/tests/unit/jobs airflow-core/tests/unit/assets airflow-core/tests/unit/cli/commands airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py airflow-core/tests/unit/api_fastapi/core_api/routes/ui\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config56] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config57] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config58] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config59] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config60] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config61] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config62] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config63] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config64] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config65] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config66] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config67] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config68] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config69] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config70] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config71] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config72] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config73] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config74] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config75] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config76] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config77] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config78] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config79] PASSED [ 64%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config80] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config81] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config82] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config83] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config84] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config85] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config86] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config87] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config88] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config89] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config90] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config91] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config92] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config93] PASSED [ 65%]\nairflow-core/tests/unit/cli/commands/test_config_command.py::TestConfigLint::test_lint_detects_removed_configs[removed_config94] \n[timed out after 900s]"
+  },
+  "gate_failures": [
+    {
+      "attempt": 0,
+      "codes": [
+        "tests.baseline_error"
+      ],
+      "gate": "tests.baseline_runnable",
+      "task": null
+    }
+  ],
+  "head": null,
+  "human_decisions": [
+    {
+      "actor": "policy",
+      "decision": "approve",
+      "gate": "human.plan_approved"
+    }
+  ],
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "plan_tasks": [
+    {
+      "files": [
+        "airflow-core/src/airflow/utils/state.py",
+        "airflow-core/src/airflow/models/dag.py",
+        "airflow-core/src/airflow/models/backfill.py",
+        "airflow-core/src/airflow/models/dagrun.py",
+        "airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py",
+        "airflow-core/src/airflow/utils/db.py",
+        "airflow-core/docs/migrations-ref.rst",
+        "airflow-core/docs/img/airflow_erd.sha256",
+        "airflow-core/docs/img/airflow_erd.svg",
+        "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+        "airflow-core/src/airflow/assets/manager.py",
+        "airflow-core/src/airflow/api_fastapi/common/parameters.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml",
+        "airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml",
+        "airflow-core/src/airflow/api_fastapi/logging/decorators.py",
+        "airflow-core/src/airflow/cli/commands/dag_command.py",
+        "airflow-core/docs/core-concepts/dags.rst",
+        "airflow-core/docs/faq.rst",
+        "airflow-core/newsfragments/73200.significant.rst",
+        "airflow-core/tests/unit/models/test_dag.py",
+        "airflow-core/tests/unit/models/test_dagrun.py",
+        "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+        "airflow-core/tests/unit/assets/test_manager.py",
+        "airflow-core/tests/unit/cli/commands/test_dag_command.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py"
+      ],
+      "id": "T1",
+      "key": "T1",
+      "tests": [
+        "airflow-core/tests/unit/models/test_dag.py",
+        "airflow-core/tests/unit/models/test_dagrun.py",
+        "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+        "airflow-core/tests/unit/assets/test_manager.py",
+        "airflow-core/tests/unit/cli/commands/test_dag_command.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py"
+      ]
+    }
+  ],
+  "plan_version": 1,
+  "run_dir": "/work/aih/runs/20261018T200809Z-341129",
+  "run_id": "20261018T200809Z-341129",
+  "schema_version": 1,
+  "sessions": 2,
+  "status": "failed",
+  "tasks": [],
+  "usage": {
+    "cache_creation_input_tokens": 84746,
+    "cache_read_input_tokens": 394333,
+    "cost_usd": 0.516491,
+    "duration_ms": 95506,
+    "input_tokens": 22,
+    "num_turns": 40,
+    "output_tokens": 13803
+  },
+  "worktree": "/work/aih/worktrees/20261018T200809Z-341129"
+}
