@@ -811,6 +811,32 @@ downstream tasks are put in to a state of "Scheduled". When the Dag is unpaused,
 begin running according to the Dag logic. Dags with no "scheduled" tasks will begin running according to
 their schedule.
 
+
+.. _concepts:dag-draining:
+
+Draining a Dag
+~~~~~~~~~~~~~~
+
+Pausing is abrupt: queued and downstream tasks of the current runs wait until the Dag is unpaused.
+When you want to stop new scheduled runs but let the work already in flight finish, for example before an
+upgrade or during a maintenance window, set the Dag's scheduling state to ``draining`` ("drain, then pause").
+The scheduling state is one of ``active``, ``draining`` or ``paused``, and is available as
+``scheduling_state`` in the REST API, next to ``is_paused``.
+
+While a Dag is draining:
+
+* the Scheduler creates no new runs for it: scheduled runs, runs triggered by asset events (the events are
+  still recorded) and runs for partitioned asset events are all held back;
+* tasks of its queued and running runs keep being scheduled and executed as for an active Dag;
+* you can still trigger runs manually, through the API or with a backfill. Such runs extend the drain until
+  they finish.
+
+When the Dag has no queued or running runs left, and no backfill that is still being set up, the Scheduler
+switches it to ``paused`` by itself and records a ``drain_completed`` entry in the audit log. Draining is
+therefore transient: the resting states are ``active`` and ``paused``. Pausing or unpausing a draining Dag,
+from the UI, API or CLI (``airflow dags pause`` and ``airflow dags unpause``), cancels the drain. Clients that
+only use ``is_paused`` keep working unchanged.
+
 Dags can be deactivated (do not confuse it with ``Active`` tag in the UI) by removing them from the
 ``DAGS_FOLDER``. When scheduler parses the ``DAGS_FOLDER`` and misses the Dag that it had seen
 before and stored in the database it will set is as deactivated. The metadata and history of the

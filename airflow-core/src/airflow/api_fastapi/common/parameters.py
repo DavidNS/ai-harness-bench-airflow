@@ -73,7 +73,7 @@ from airflow.models.variable import Variable
 from airflow.models.xcom import XComModel
 from airflow.typing_compat import Self
 from airflow.utils.sqlalchemy import JsonContains, apply_regex_query_timeout
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 if TYPE_CHECKING:
@@ -217,6 +217,22 @@ class _ExcludeStaleFilter(BaseParam[bool]):
     @classmethod
     def depends(cls, exclude_stale: bool = True) -> _ExcludeStaleFilter:
         return cls().set_value(exclude_stale)
+
+
+class _SchedulingStateFilter(BaseParam[DagSchedulingState]):
+    """Filter on the Dag scheduling state derived from is_paused and is_draining."""
+
+    def to_orm(self, select: Select) -> Select:
+        if self.value is None and self.skip_none:
+            return select
+        return select.where(
+            DagModel.is_paused == (self.value == DagSchedulingState.PAUSED),
+            DagModel.is_draining == (self.value == DagSchedulingState.DRAINING),
+        )
+
+    @classmethod
+    def depends(cls, scheduling_state: DagSchedulingState | None = None) -> _SchedulingStateFilter:
+        return cls().set_value(scheduling_state)
 
 
 class _PrefixPatternParam(BaseParam[str], ABC):
@@ -1301,6 +1317,7 @@ QueryPausedFilter = Annotated[
     FilterParam[bool | None],
     Depends(filter_param_factory(DagModel.is_paused, bool | None, filter_name="paused")),
 ]
+QueryDagSchedulingStateFilter = Annotated[_SchedulingStateFilter, Depends(_SchedulingStateFilter.depends)]
 QueryHasImportErrorsFilter = Annotated[
     FilterParam[bool | None],
     Depends(

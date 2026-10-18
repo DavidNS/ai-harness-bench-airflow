@@ -40,7 +40,9 @@ from airflow.models.asset import (
     AssetModel,
     AssetPartitionDagRun,
     DagScheduleAssetAliasReference,
+    DagScheduleAssetNameReference,
     DagScheduleAssetReference,
+    DagScheduleAssetUriReference,
 )
 from airflow.models.dag import DAG, DagModel
 from airflow.models.dagbundle import DagBundleModel
@@ -52,6 +54,7 @@ from airflow.partition_mappers.window import WeekWindow
 from airflow.providers.standard.operators.empty import EmptyOperator
 from airflow.sdk.definitions.asset import Asset
 from airflow.sdk.definitions.timetables.assets import PartitionedAssetTimetable
+from airflow.utils.state import DagSchedulingState
 
 from tests_common.test_utils.config import conf_vars
 from tests_common.test_utils.db import (
@@ -681,6 +684,53 @@ class TestAssetManager:
 
         queued_id = session.scalar(select(AssetDagRunQueue.target_dag_id))
         assert queued_id == "stale_dag"
+
+    @pytest.mark.parametrize("reference", ["asset", "alias", "name", "uri"])
+    @pytest.mark.usefixtures("testing_dag_bundle")
+    def test_register_asset_change_does_not_queue_draining_dag(self, session, mock_task_instance, reference):
+        asm = AssetModel(uri="test://drain_asset/", name="drain_asset", group="asset")
+        session.add(asm)
+        active_dag = DagModel(dag_id="active_dag", is_stale=False, bundle_name="testing")
+        draining_dag = DagModel(dag_id="draining_dag", is_stale=False, bundle_name="testing")
+        draining_dag.set_scheduling_state(DagSchedulingState.DRAINING)
+        session.add_all([active_dag, draining_dag])
+        session.flush()
+
+        alias_names: list[str] = []
+        if reference == "asset":
+            asm.scheduled_dags = [
+                DagScheduleAssetReference(dag_id=d.dag_id) for d in (active_dag, draining_dag)
+            ]
+        elif reference == "alias":
+            alias = AssetAliasModel(name="drain_alias", group="test")
+            session.add(alias)
+            alias.scheduled_dags = [
+                DagScheduleAssetAliasReference(alias_id=alias.id, dag_id=d.dag_id)
+                for d in (active_dag, draining_dag)
+            ]
+            alias_names = ["drain_alias"]
+        elif reference == "name":
+            session.add_all(
+                DagScheduleAssetNameReference(name="drain_asset", dag_id=d.dag_id)
+                for d in (active_dag, draining_dag)
+            )
+        else:
+            session.add_all(
+                DagScheduleAssetUriReference(uri="test://drain_asset/", dag_id=d.dag_id)
+                for d in (active_dag, draining_dag)
+            )
+        session.flush()
+
+        AssetManager.register_asset_change(
+            task_instance=mock_task_instance,
+            asset=Asset(uri="test://drain_asset/", name="drain_asset"),
+            source_alias_names=alias_names,
+            session=session,
+        )
+        session.flush()
+
+        assert session.scalar(select(func.count()).select_from(AssetEvent)) == 1
+        assert set(session.scalars(select(AssetDagRunQueue.target_dag_id))) == {"active_dag"}
 
     @pytest.mark.usefixtures("testing_dag_bundle")
     def test_partitioned_asset_event_does_not_trigger_non_partitioned_dag(self, session, mock_task_instance):

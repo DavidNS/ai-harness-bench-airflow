@@ -52,7 +52,7 @@ from airflow.timetables.base import Timetable
 from airflow.triggers.base import TriggerEvent
 from airflow.utils.cli import get_db_dag
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 from tests_common.test_utils.config import conf_vars
@@ -563,6 +563,36 @@ class TestCliDags:
         assert DagModel.get_dagmodel("example_bash_operator").is_paused
         dag_command.dag_unpause(args)
         assert not DagModel.get_dagmodel("example_bash_operator").is_paused
+
+    @pytest.mark.parametrize(
+        ("command", "expected_state"),
+        [
+            pytest.param("pause", DagSchedulingState.PAUSED, id="pause"),
+            pytest.param("unpause", DagSchedulingState.ACTIVE, id="unpause"),
+        ],
+    )
+    def test_pause_unpause_changes_draining_dag(self, stdout_capture, command, expected_state):
+        with create_session() as session:
+            session.get(DagModel, "example_bash_operator").set_scheduling_state(DagSchedulingState.DRAINING)
+
+        args = self.parser.parse_args(["dags", command, "example_bash_operator", "--yes"])
+        with stdout_capture as temp_stdout:
+            getattr(dag_command, f"dag_{command}")(args)
+
+        assert "No " not in temp_stdout.getvalue()
+        dag_model = DagModel.get_dagmodel("example_bash_operator")
+        assert dag_model.scheduling_state == expected_state
+        assert dag_model.is_draining is False
+
+    def test_dag_details_includes_scheduling_state(self, stdout_capture):
+        with create_session() as session:
+            session.get(DagModel, "example_bash_operator").set_scheduling_state(DagSchedulingState.DRAINING)
+
+        args = self.parser.parse_args(["dags", "details", "example_bash_operator", "--output", "json"])
+        with stdout_capture as temp_stdout:
+            dag_command.dag_details(args)
+
+        assert json.loads(temp_stdout.getvalue())[0]["scheduling_state"] == "draining"
 
     def test_pause_unpause_from_dag_cli(self):
         """``DAG.cli()`` passes the Dag positionally and its parser drops ``--dag-id``."""

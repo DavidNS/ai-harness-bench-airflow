@@ -84,7 +84,7 @@ from airflow.task.trigger_rule import TriggerRule
 from airflow.triggers.base import StartTriggerArgs
 from airflow.utils.session import create_session
 from airflow.utils.sqlalchemy import prohibit_commit
-from airflow.utils.state import DagRunState, State, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils import db
@@ -4728,6 +4728,27 @@ def test_get_running_dag_runs_to_examine_eager_loads_dag_tags(dag_maker, session
     assert "dag_model" not in sa_inspect(dr).unloaded
     assert "tags" not in sa_inspect(dr.dag_model).unloaded
     assert dr.stats_tags == {"dag_id": "eager_tag_dag", "run_type": dr.run_type, "env": "prod"}
+
+
+@pytest.mark.parametrize(
+    ("scheduling_state", "examined"),
+    [
+        pytest.param(DagSchedulingState.ACTIVE, True, id="active"),
+        pytest.param(DagSchedulingState.DRAINING, True, id="draining"),
+        pytest.param(DagSchedulingState.PAUSED, False, id="paused"),
+    ],
+)
+def test_get_running_dag_runs_to_examine_by_scheduling_state(dag_maker, session, scheduling_state, examined):
+    with dag_maker("scheduling_state_dag", session=session):
+        pass
+    dag_maker.create_dagrun(state=DagRunState.RUNNING)
+    dag_maker.dag_model.set_scheduling_state(scheduling_state)
+    session.commit()
+
+    dag_ids = {
+        r.dag_id for r in DagRun.get_running_dag_runs_to_examine(session=session, eagerly_load_dag_tags=False)
+    }
+    assert ("scheduling_state_dag" in dag_ids) is examined
 
 
 class TestClearPartitionRuns:

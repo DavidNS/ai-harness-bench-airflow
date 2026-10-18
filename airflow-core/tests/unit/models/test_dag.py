@@ -35,6 +35,7 @@ import pendulum
 import pytest
 import time_machine
 from sqlalchemy import delete, func, inspect, select, update
+from sqlalchemy.exc import IntegrityError
 
 from airflow import settings
 from airflow._shared.module_loading import qualname
@@ -100,7 +101,7 @@ from airflow.timetables.simple import (
 from airflow.triggers.base import TriggerEvent
 from airflow.utils.file import list_py_file_paths
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, State, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils.asserts import assert_queries_count
@@ -1405,6 +1406,100 @@ class TestDag:
         assert hash(dag_eq) == hash(dag)
         assert hash(dag_diff_name) != hash(dag)
         assert hash(dag_subclass) != hash(dag)
+
+    @pytest.mark.parametrize(
+        ("is_paused", "is_draining", "expected"),
+        [
+            pytest.param(False, False, DagSchedulingState.ACTIVE, id="active"),
+            pytest.param(False, True, DagSchedulingState.DRAINING, id="draining"),
+            pytest.param(True, False, DagSchedulingState.PAUSED, id="paused"),
+        ],
+    )
+    def test_scheduling_state_is_derived_from_flags(self, is_paused, is_draining, expected):
+        dag_model = DagModel(dag_id="state_dag", is_paused=is_paused, is_draining=is_draining)
+        assert dag_model.scheduling_state == expected
+
+    @pytest.mark.parametrize("initial", list(DagSchedulingState))
+    @pytest.mark.parametrize(
+        ("target", "expected_flags"),
+        [
+            pytest.param(DagSchedulingState.ACTIVE, (False, False), id="active"),
+            pytest.param(DagSchedulingState.DRAINING, (False, True), id="draining"),
+            pytest.param(DagSchedulingState.PAUSED, (True, False), id="paused"),
+        ],
+    )
+    def test_set_scheduling_state_sets_both_flags(self, initial, target, expected_flags):
+        dag_model = DagModel(dag_id="state_dag")
+        dag_model.set_scheduling_state(initial)
+        dag_model.set_scheduling_state(target)
+        assert (dag_model.is_paused, dag_model.is_draining) == expected_flags
+        assert dag_model.scheduling_state == target
+
+    def test_scheduling_state_values(self):
+        assert [state.value for state in DagSchedulingState] == ["active", "draining", "paused"]
+
+    def test_dag_cannot_be_paused_and_draining(self, testing_dag_bundle, session):
+        session.add(
+            DagModel(dag_id="paused_and_draining", bundle_name="testing", is_paused=True, is_draining=True)
+        )
+        with pytest.raises(IntegrityError):
+            session.flush()
+        session.rollback()
+
+    def test_is_draining_defaults_to_false(self, testing_dag_bundle, session):
+        dag_model = DagModel(dag_id="default_draining", bundle_name="testing")
+        session.add(dag_model)
+        session.flush()
+        assert dag_model.is_draining is False
+
+    def test_dags_needing_dagruns_skips_draining_dag(self, testing_dag_bundle, session):
+        orm_dag = DagModel(
+            dag_id="draining_dag",
+            bundle_name="testing",
+            max_active_tasks=1,
+            has_task_concurrency_limits=False,
+            next_dagrun=timezone.datetime(2020, 1, 1),
+            next_dagrun_create_after=timezone.datetime(2020, 1, 2),
+            is_stale=False,
+        )
+        session.add(orm_dag)
+        session.flush()
+
+        query, _ = DagModel.dags_needing_dagruns(session)
+        assert query.all() == [orm_dag]
+
+        orm_dag.set_scheduling_state(DagSchedulingState.DRAINING)
+        session.flush()
+        query, _ = DagModel.dags_needing_dagruns(session)
+        assert query.all() == []
+
+    def test_dag_paused_after_limit_clears_draining(self, testing_dag_bundle):
+        dag = DAG("dag_draining_failed", schedule=None, is_paused_upon_creation=False)
+        dag.max_consecutive_failed_dag_runs = 1
+        op1 = BashOperator(task_id="task", bash_command="exit 1;")
+        dag.add_task(op1)
+        session = settings.Session()
+        session.add(DagModel(dag_id=dag.dag_id, bundle_name="testing", is_stale=False))
+        session.flush()
+        scheduler_dag = sync_dag_to_db(dag, session=session)
+        session.get(DagModel, dag.dag_id).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.flush()
+
+        self._add_dag_run(
+            scheduler_dag,
+            op1,
+            session,
+            "run_1",
+            TEST_DATE,
+            TEST_DATE,
+            TaskInstanceState.FAILED,
+            DagRunState.FAILED,
+        )
+
+        dag_model = session.get(DagModel, dag.dag_id)
+        session.refresh(dag_model)
+        assert dag_model.scheduling_state == DagSchedulingState.PAUSED
+        assert dag_model.is_draining is False
 
     def test_get_paused_dag_ids(self, testing_dag_bundle):
         dag_id = "test_get_paused_dag_ids"

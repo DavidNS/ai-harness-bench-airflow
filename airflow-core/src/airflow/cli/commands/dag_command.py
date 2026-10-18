@@ -30,7 +30,7 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, true
 
 from airflow._shared.timezones import timezone
 from airflow.api.client import get_current_api_client
@@ -59,7 +59,7 @@ from airflow.utils.helpers import ask_yesno, chunks
 from airflow.utils.platform import getuser
 from airflow.utils.providers_configuration_loader import providers_configuration_loaded
 from airflow.utils.session import NEW_SESSION, create_session, provide_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 if TYPE_CHECKING:
@@ -245,7 +245,7 @@ def _bulk_clear_runs(
 @providers_configuration_loaded
 def dag_pause(args, dag: DAG | None = None) -> None:
     """Pauses a DAG."""
-    set_is_paused(True, args, dag)
+    set_scheduling_state(DagSchedulingState.PAUSED, args, dag)
 
 
 @cli_utils.action_cli
@@ -253,13 +253,16 @@ def dag_pause(args, dag: DAG | None = None) -> None:
 @providers_configuration_loaded
 def dag_unpause(args, dag: DAG | None = None) -> None:
     """Unpauses a DAG."""
-    set_is_paused(False, args, dag)
+    set_scheduling_state(DagSchedulingState.ACTIVE, args, dag)
 
 
 @providers_configuration_loaded
 @provide_session
-def set_is_paused(is_paused: bool, args, dag: DAG | None = None, *, session: Session = NEW_SESSION) -> None:
-    """Set is_paused for DAG by a given dag_id."""
+def set_scheduling_state(
+    state: DagSchedulingState, args, dag: DAG | None = None, *, session: Session = NEW_SESSION
+) -> None:
+    """Set the paused or active scheduling state (clearing draining) for DAG by a given dag_id."""
+    is_paused = state == DagSchedulingState.PAUSED
     if dag:
         # A Dag object fully determines the target, so pattern matching has nothing left to match on.
         args.dag_id = dag.dag_id
@@ -270,7 +273,7 @@ def set_is_paused(is_paused: bool, args, dag: DAG | None = None, *, session: Ses
     else:
         query = query.where(DagModel.dag_id == args.dag_id)
 
-    query = query.where(DagModel.is_paused != is_paused)
+    query = query.where(or_(DagModel.is_paused != is_paused, DagModel.is_draining == true()))
 
     matched_dags = list(session.scalars(query).all())
     if not matched_dags:
@@ -288,13 +291,14 @@ def set_is_paused(is_paused: bool, args, dag: DAG | None = None, *, session: Ses
             print("Operation cancelled by user")
             return
 
-    def _update_is_paused(dag_model: DagModel) -> bool:
+    def _update_scheduling_state(dag_model: DagModel) -> bool:
         old_is_paused = dag_model.is_paused
-        dag_model.is_paused = is_paused
+        dag_model.set_scheduling_state(state)
         return old_is_paused
 
     old_values = [
-        {"dag_id": dag_model.dag_id, "is_paused": _update_is_paused(dag_model)} for dag_model in matched_dags
+        {"dag_id": dag_model.dag_id, "is_paused": _update_scheduling_state(dag_model)}
+        for dag_model in matched_dags
     ]
     session.commit()
     AirflowConsole().print_as(data=old_values, output=args.output)
@@ -381,6 +385,7 @@ def _get_dagbag_dag_details(dag: DAG) -> dict:
         "bundle_name": None,
         "bundle_version": None,
         "is_paused": None,
+        "scheduling_state": None,
         "is_stale": None,
         "last_parsed_time": None,
         "last_parse_duration": None,

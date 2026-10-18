@@ -32,6 +32,7 @@ class DAGWithLatestDagRunsResponse(DAGResponse):
     latest_dag_runs: list[DAGRunLightResponse]
     pending_actions: list[HITLDetail]
     is_favorite: bool
+    has_unfinished_runs: bool = False
     team_name: str | None = None
 
 
