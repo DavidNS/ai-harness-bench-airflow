@@ -73,7 +73,7 @@ from airflow.models.variable import Variable
 from airflow.models.xcom import XComModel
 from airflow.typing_compat import Self
 from airflow.utils.sqlalchemy import JsonContains, apply_regex_query_timeout
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 if TYPE_CHECKING:
@@ -1349,6 +1349,30 @@ QueryDagIdPrefixPatternSearchWithNone = Annotated[
 QueryTagsFilter = Annotated[_TagsFilter, Depends(_TagsFilter.depends)]
 QueryOwnersFilter = Annotated[_OwnersFilter, Depends(_OwnersFilter.depends)]
 QueryTeamsFilter = Annotated[_TeamsFilter, Depends(_TeamsFilter.depends)]
+
+
+class _SchedulingStateFilter(BaseParam[DagSchedulingState]):
+    """Filter Dags by scheduling state."""
+
+    def to_orm(self, select: Select) -> Select:
+        if self.value is None and self.skip_none:
+            return select
+        return select.where(
+            DagModel.is_paused == (self.value == DagSchedulingState.PAUSED),
+            DagModel.is_draining == (self.value == DagSchedulingState.DRAINING),
+        )
+
+    @classmethod
+    def depends(
+        cls,
+        scheduling_state: DagSchedulingState | None = Query(
+            None, description="Filter Dags by scheduling state (active, draining or paused)"
+        ),
+    ) -> _SchedulingStateFilter:
+        return cls().set_value(scheduling_state)
+
+
+QuerySchedulingStateFilter = Annotated[_SchedulingStateFilter, Depends(_SchedulingStateFilter.depends)]
 
 
 class _HasAssetScheduleFilter(BaseParam[bool]):

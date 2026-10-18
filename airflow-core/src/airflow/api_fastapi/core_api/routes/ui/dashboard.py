@@ -152,7 +152,9 @@ def dag_stats(
     )
     dag_counts_query = (
         select(
-            func.coalesce(func.sum(case((DagModel.is_paused == false(), 1))), 0).label("active"),
+            func.coalesce(
+                func.sum(case(((DagModel.is_paused == false()) & (DagModel.is_draining == false()), 1))), 0
+            ).label("active"),
             func.coalesce(func.sum(case((latest_state == DagRunState.FAILED, 1))), 0).label("failed"),
         )
         .select_from(DagModel)

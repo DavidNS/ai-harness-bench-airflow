@@ -52,7 +52,7 @@ from airflow.timetables.base import Timetable
 from airflow.triggers.base import TriggerEvent
 from airflow.utils.cli import get_db_dag
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 from tests_common.test_utils.config import conf_vars
@@ -591,6 +591,43 @@ class TestCliDags:
 
         clear_db_dags()
         self.setup_class()
+
+    @staticmethod
+    def _set_scheduling_state(dag_id, state):
+        with create_session() as session:
+            session.get(DagModel, dag_id).set_scheduling_state(state)
+
+    def test_pause_draining_dag(self, stdout_capture):
+        self._set_scheduling_state("example_bash_operator", DagSchedulingState.DRAINING)
+
+        with stdout_capture:
+            dag_command.dag_pause(self.parser.parse_args(["dags", "pause", "example_bash_operator"]))
+
+        dag_model = DagModel.get_dagmodel("example_bash_operator")
+        assert dag_model.scheduling_state == DagSchedulingState.PAUSED
+        assert not dag_model.is_draining
+
+    def test_unpause_draining_dag(self, stdout_capture):
+        self._set_scheduling_state("example_bash_operator", DagSchedulingState.DRAINING)
+
+        with stdout_capture as temp_stdout:
+            dag_command.dag_unpause(self.parser.parse_args(["dags", "unpause", "example_bash_operator"]))
+
+        dag_model = DagModel.get_dagmodel("example_bash_operator")
+        assert dag_model.scheduling_state == DagSchedulingState.ACTIVE
+        assert not dag_model.is_draining
+        assert "No paused DAGs were found" not in temp_stdout.getvalue()
+
+    def test_cli_dag_details_includes_scheduling_state(self, stdout_capture):
+        self._set_scheduling_state("example_complex", DagSchedulingState.DRAINING)
+        args = self.parser.parse_args(["dags", "details", "example_complex", "--output", "json"])
+
+        with stdout_capture as temp_stdout:
+            dag_command.dag_details(args)
+
+        [details] = json.loads(temp_stdout.getvalue())
+        assert details["scheduling_state"] == "draining"
+        self._set_scheduling_state("example_complex", DagSchedulingState.ACTIVE)
 
     @mock.patch("airflow.cli.commands.dag_command.ask_yesno")
     def test_pause_regex(self, mock_yesno):

@@ -20,8 +20,6 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Query, Response, status
-from fastapi.exceptions import RequestValidationError
-from pydantic import ValidationError
 from sqlalchemy import delete, func, insert, select, update
 
 from airflow.api.common import delete_dag as delete_dag_module
@@ -62,7 +60,6 @@ from airflow.api_fastapi.core_api.datamodels.dags import (
     DAGCollectionResponse,
     DAGDetailsResponse,
     DAGPatchBody,
-    DAGPatchBodyPartial,
     DAGResponse,
 )
 from airflow.api_fastapi.core_api.openapi.exceptions import create_openapi_http_exception_doc
@@ -77,9 +74,11 @@ from airflow.exceptions import AirflowException, DagNotFound
 from airflow.models import DagModel
 from airflow.models.dag_favorite import DagFavorite
 from airflow.models.dagrun import DagRun
-from airflow.utils.state import DagRunState
+from airflow.utils.state import DagRunState, DagSchedulingState
 
 dags_router = AirflowRouter(tags=["DAG"], prefix="/dags")
+
+PATCHABLE_FIELDS = ("is_paused", "scheduling_state")
 
 
 @dags_router.get("", dependencies=[Depends(requires_access_dag(method="GET"))])
@@ -272,6 +271,19 @@ def get_dag_details(
     return DAGDetailsResponse.model_validate(dag_model)
 
 
+def _validate_patch_update_mask(patch_body: DAGPatchBody, update_mask: list[str]) -> None:
+    if len(update_mask) != 1 or update_mask[0] not in PATCHABLE_FIELDS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Only `is_paused` or `scheduling_state` field can be updated through the REST API",
+        )
+    if getattr(patch_body, update_mask[0]) is None:
+        raise HTTPException(
+            HTTP_422_UNPROCESSABLE_CONTENT,
+            f"`update_mask` names `{update_mask[0]}` but the request body does not carry it",
+        )
+
+
 @dags_router.patch(
     "/{dag_id}",
     responses=create_openapi_http_exception_doc(
@@ -294,27 +306,10 @@ def patch_dag(
     if dag is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Dag with id: {dag_id} was not found")
 
-    fields_to_update = patch_body.model_fields_set
     if update_mask:
-        if update_mask != ["is_paused"]:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Only `is_paused` field can be updated through the REST API"
-            )
-        fields_to_update = fields_to_update.intersection(update_mask)
-        try:
-            DAGPatchBodyPartial(**patch_body.model_dump(include=fields_to_update))
-        except ValidationError as e:
-            raise RequestValidationError(errors=e.errors())
-    else:
-        try:
-            DAGPatchBody(**patch_body.model_dump())
-        except ValidationError as e:
-            raise RequestValidationError(errors=e.errors())
+        _validate_patch_update_mask(patch_body, update_mask)
 
-    data = patch_body.model_dump(include=fields_to_update, by_alias=True)
-
-    for key, val in data.items():
-        setattr(dag, key, val)
+    dag.set_scheduling_state(patch_body.get_scheduling_state())
 
     return dag
 
@@ -351,15 +346,7 @@ def patch_dags(
     `~` or `%` for `dag_id_pattern`.
     """
     if update_mask:
-        if update_mask != ["is_paused"]:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Only `is_paused` field can be updated through the REST API"
-            )
-    else:
-        try:
-            DAGPatchBody.model_validate(patch_body)
-        except ValidationError as e:
-            raise RequestValidationError(errors=e.errors())
+        _validate_patch_update_mask(patch_body, update_mask)
 
     dags_select, total_entries = paginated_select(
         statement=select(DagModel),
@@ -392,10 +379,14 @@ def patch_dags(
         ],
     ).subquery()
 
+    new_state = patch_body.get_scheduling_state()
     session.execute(
         update(DagModel)
         .where(DagModel.dag_id.in_(select(filtered_dag_ids.c.dag_id)))
-        .values(is_paused=patch_body.is_paused)
+        .values(
+            is_paused=new_state == DagSchedulingState.PAUSED,
+            is_draining=new_state == DagSchedulingState.DRAINING,
+        )
         .execution_options(synchronize_session="fetch")
     )
 

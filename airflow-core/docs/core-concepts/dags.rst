@@ -811,6 +811,33 @@ downstream tasks are put in to a state of "Scheduled". When the Dag is unpaused,
 begin running according to the Dag logic. Dags with no "scheduled" tasks will begin running according to
 their schedule.
 
+.. _concepts:dag-draining:
+
+Dag draining
+^^^^^^^^^^^^
+
+Pausing a Dag is abrupt: queued and downstream tasks of the current Dag runs are stranded until the Dag is
+unpaused. To stop starting new runs while letting the work in flight finish, set the Dag's scheduling state
+to ``draining`` ("drain, then pause") instead. A Dag is in exactly one of three scheduling states:
+``active``, ``draining`` or ``paused``. ``draining`` is transient and always converges to ``paused``.
+
+While a Dag is draining:
+
+* the Scheduler creates no new runs for it, whether scheduled by time, by asset events or by partitioned
+  asset events (asset events are still recorded);
+* tasks of its queued and running Dag runs keep being scheduled and executed as for an active Dag;
+* explicit triggers (manual runs, runs triggered by an operator, asset materialization and backfills)
+  remain available, and extend the drain until the resulting work finishes.
+
+Once the Dag has no queued or running Dag run and no backfill still being initialized, the Scheduler moves it
+to ``paused`` (checked every few seconds) and records a ``drain_completed`` audit log entry. Dags that are
+auto-paused after consecutive failures leave the draining state as well.
+
+The scheduling state is available as ``scheduling_state`` in the REST API: ``PATCH /dags/{dag_id}`` accepts
+either ``is_paused`` or ``scheduling_state`` (exactly one of the two). Clients that only know ``is_paused``
+keep working: ``true`` pauses and ``false`` activates the Dag, and both cancel a drain. ``airflow dags pause``
+and ``airflow dags unpause`` do the same from the command line.
+
 Dags can be deactivated (do not confuse it with ``Active`` tag in the UI) by removing them from the
 ``DAGS_FOLDER``. When scheduler parses the ``DAGS_FOLDER`` and misses the Dag that it had seen
 before and stored in the database it will set is as deactivated. The metadata and history of the

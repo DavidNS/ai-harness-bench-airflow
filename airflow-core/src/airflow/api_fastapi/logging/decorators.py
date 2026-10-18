@@ -216,6 +216,7 @@ def action_logging(event: str | None = None):
             "csrf_token",
             "_csrf_token",
             "is_paused",
+            "scheduling_state",
             "dag_id",
             "task_id",
             "dag_run_id",
@@ -246,8 +247,9 @@ def action_logging(event: str | None = None):
 
         if has_json_body:
             params.update(masked_body_json)
-        if params and "is_paused" in params:
-            extra_fields["is_paused"] = params["is_paused"]
+        for state_field in ("is_paused", "scheduling_state"):
+            if params.get(state_field) is not None:
+                extra_fields[state_field] = params[state_field]
 
         extra_fields["method"] = request.method
 

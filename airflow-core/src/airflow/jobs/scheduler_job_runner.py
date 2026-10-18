@@ -131,7 +131,7 @@ from airflow.utils.sqlalchemy import (
     random_db_uuid,
     with_row_locks,
 )
-from airflow.utils.state import CallbackState, DagRunState, State, TaskInstanceState
+from airflow.utils.state import CallbackState, DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 if TYPE_CHECKING:
@@ -1789,6 +1789,48 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
         except Exception as e:  # should not fail the scheduler
             self.log.exception("Failed to update dag run state for paused dags due to %s", e)
 
+    @provide_session
+    def _finalize_draining_dags(self, *, session: Session = NEW_SESSION) -> None:
+        """Pause draining Dags that have no unfinished run and no backfill still being initialised."""
+        has_unfinished_run = exists(
+            select(DagRun.id).where(
+                DagRun.dag_id == DagModel.dag_id,
+                DagRun.state.in_((DagRunState.QUEUED, DagRunState.RUNNING)),
+            )
+        )
+        # A backfill is committed before its Dag runs exist, so it must hold the drain open.
+        has_uninitialised_backfill = exists(
+            select(Backfill.id).where(
+                Backfill.dag_id == DagModel.dag_id,
+                Backfill.completed_at.is_(None),
+                ~exists(select(BackfillDagRun.id).where(BackfillDagRun.backfill_id == Backfill.id)),
+            )
+        )
+        query = (
+            select(DagModel)
+            .where(
+                DagModel.is_draining == expression.true(),
+                ~has_unfinished_run,
+                ~has_uninitialised_backfill,
+            )
+            .order_by(DagModel.dag_id)
+            .limit(DagModel.NUM_DAGS_PER_DAGRUN_QUERY)
+        )
+        for dag_model in session.scalars(
+            with_row_locks(query, of=DagModel, session=session, skip_locked=True)
+        ):
+            self.log.info("Drain completed, pausing Dag", dag_id=dag_model.dag_id)
+            dag_model.set_scheduling_state(DagSchedulingState.PAUSED)
+            session.add(
+                Log(
+                    event="drain_completed",
+                    dag_id=dag_model.dag_id,
+                    owner="scheduler",
+                    owner_display_name="Scheduler",
+                    extra=f"[('dag_id', '{dag_model.dag_id}'), ('is_paused', True)]",
+                )
+            )
+
     def _run_scheduler_loop(self) -> None:
         """
         Harvest DAG parsing results, queue tasks, and perform executor heartbeat; the actual scheduler loop.
@@ -1854,6 +1896,8 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
         )
 
         timers.call_regular_interval(60.0, self._update_dag_run_state_for_paused_dags)
+
+        timers.call_regular_interval(5.0, self._finalize_draining_dags)
 
         timers.call_regular_interval(
             conf.getfloat("scheduler", "task_queued_timeout_check_interval"),
@@ -2282,6 +2326,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                 .where(
                     AssetPartitionDagRun.created_dag_run_id.is_(None),
                     DagModel.is_stale.is_(False),
+                    DagModel.is_draining.is_(False),
                 )
                 .order_by(AssetPartitionDagRun.created_at, AssetPartitionDagRun.id)
                 .limit(self._max_partition_dag_runs_per_loop),
