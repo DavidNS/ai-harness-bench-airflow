@@ -703,6 +703,15 @@ try pausing the Dag again, or check the console or server logs if the
 issue recurs.
 
 
+How do I pause a Dag without stranding the runs in progress?
+------------------------------------------------------------
+
+Pausing stops the Scheduler from starting queued and downstream tasks of the current runs. To let the runs
+in progress finish and stop new scheduled runs, set the Dag's ``scheduling_state`` to ``draining`` through the
+REST API. The Scheduler pauses the Dag by itself once its last queued or running Dag run is finished. See
+:ref:`concepts:dag-draining`.
+
+
 API Server
 ^^^^^^^^^^
 

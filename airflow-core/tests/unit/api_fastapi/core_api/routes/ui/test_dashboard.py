@@ -29,7 +29,7 @@ from airflow.models.dag import DagModel
 from airflow.models.dagbag import DBDagBag
 from airflow.models.dagrun import DagRun
 from airflow.providers.standard.operators.empty import EmptyOperator
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 from tests_common.test_utils.asserts import assert_queries_count
@@ -391,6 +391,16 @@ class TestDagStatsEndpoint:
             "running_dag_count": 1,
             "queued_dag_count": 1,
         }
+
+    @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_multiple_dags")
+    def test_active_dag_count_excludes_draining_dags(self, test_client, session):
+        session.get(DagModel, "test_running_dag").set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        response = test_client.get("/dashboard/dag_stats")
+
+        assert response.status_code == 200
+        assert response.json()["active_dag_count"] == 3
 
     @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_failed_dag_runs")
     def test_should_response_200_failed_dag(self, test_client):

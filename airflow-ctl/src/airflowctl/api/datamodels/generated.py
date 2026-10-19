@@ -449,15 +449,26 @@ class CreateAssetEventsBody(BaseModel):
     access_control: AssetEventAccessControl | None = None
 
 
+class DagSchedulingState(str, Enum):
+    """
+    Scheduling state of a Dag; the transient ``draining`` state always converges to ``paused``.
+    """
+
+    ACTIVE = "active"
+    DRAINING = "draining"
+    PAUSED = "paused"
+
+
 class DAGPatchBody(BaseModel):
     """
-    Dag Serializer for updatable bodies.
+    Dag Serializer for updatable bodies; exactly one of ``is_paused`` and ``scheduling_state`` is set.
     """
 
     model_config = ConfigDict(
         extra="forbid",
     )
-    is_paused: Annotated[bool, Field(title="Is Paused")]
+    is_paused: Annotated[bool | None, Field(title="Is Paused")] = None
+    scheduling_state: DagSchedulingState | None = None
 
 
 class DAGRunClearBody(BaseModel):
@@ -1801,6 +1812,7 @@ class DAGResponse(BaseModel):
     dag_id: Annotated[str, Field(title="Dag Id")]
     dag_display_name: Annotated[str, Field(title="Dag Display Name")]
     is_paused: Annotated[bool, Field(title="Is Paused")]
+    scheduling_state: DagSchedulingState | None = "active"
     is_stale: Annotated[bool, Field(title="Is Stale")]
     last_parsed_time: Annotated[datetime | None, Field(title="Last Parsed Time")]
     last_parse_duration: Annotated[float | None, Field(title="Last Parse Duration")]
@@ -2672,6 +2684,7 @@ class DAGDetailsResponse(BaseModel):
     dag_id: Annotated[str, Field(title="Dag Id")]
     dag_display_name: Annotated[str, Field(title="Dag Display Name")]
     is_paused: Annotated[bool, Field(title="Is Paused")]
+    scheduling_state: DagSchedulingState | None = "active"
     is_stale: Annotated[bool, Field(title="Is Stale")]
     last_parsed_time: Annotated[datetime | None, Field(title="Last Parsed Time")]
     last_parse_duration: Annotated[float | None, Field(title="Last Parse Duration")]

@@ -146,7 +146,7 @@ from airflow.timetables.simple import (
 )
 from airflow.utils.session import NEW_SESSION, create_session, provide_session
 from airflow.utils.sqlalchemy import with_row_locks
-from airflow.utils.state import CallbackState, DagRunState, State, TaskInstanceState
+from airflow.utils.state import CallbackState, DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.pytest_plugin import AIRFLOW_ROOT_PATH
@@ -163,6 +163,7 @@ from tests_common.test_utils.db import (
     clear_db_deadline,
     clear_db_import_errors,
     clear_db_jobs,
+    clear_db_logs,
     clear_db_pakl,
     clear_db_pools,
     clear_db_runs,
@@ -14092,3 +14093,228 @@ class TestSchedulerObservabilityMetrics:
             self.job_runner._find_and_purge_task_instances_without_heartbeats()
 
         mock_stats.incr.assert_not_called()
+
+
+@pytest.mark.usefixtures("testing_dag_bundle")
+class TestDrainingDags:
+    @pytest.fixture(autouse=True)
+    def clean_db(self):
+        _clean_db()
+        clear_db_logs()
+        yield
+        _clean_db()
+        clear_db_logs()
+
+    @staticmethod
+    def _make_runner() -> SchedulerJobRunner:
+        return SchedulerJobRunner(
+            job=Job(job_type=SchedulerJobRunner.job_type), executors=[MockExecutor(do_update=False)]
+        )
+
+    @staticmethod
+    def _add_dag(session, dag_id: str, state: DagSchedulingState = DagSchedulingState.DRAINING) -> DagModel:
+        dag_model = DagModel(dag_id=dag_id, bundle_name="testing", is_stale=False)
+        dag_model.set_scheduling_state(state)
+        session.add(dag_model)
+        session.flush()
+        return dag_model
+
+    @staticmethod
+    def _add_run(session, dag_id: str, state: DagRunState, run_id: str = "run_1") -> DagRun:
+        dag_run = DagRun(
+            dag_id=dag_id,
+            run_id=run_id,
+            run_type=DagRunType.MANUAL,
+            state=state,
+            run_after=timezone.utcnow(),
+        )
+        session.add(dag_run)
+        session.flush()
+        return dag_run
+
+    @staticmethod
+    def _add_backfill(session, dag_id: str, *, completed: bool = False, with_run: bool = False) -> Backfill:
+        now = timezone.utcnow()
+        backfill = Backfill(
+            dag_id=dag_id,
+            from_date=now,
+            to_date=now,
+            completed_at=now if completed else None,
+        )
+        session.add(backfill)
+        session.flush()
+        if with_run:
+            dag_run = TestDrainingDags._add_run(session, dag_id, DagRunState.SUCCESS, run_id="backfill_run")
+            session.add(BackfillDagRun(backfill_id=backfill.id, dag_run_id=dag_run.id, sort_ordinal=1))
+            session.flush()
+        return backfill
+
+    @pytest.mark.parametrize(
+        ("run_states", "expected_state"),
+        [
+            pytest.param([], DagSchedulingState.PAUSED, id="no_runs"),
+            pytest.param(
+                [DagRunState.SUCCESS, DagRunState.FAILED], DagSchedulingState.PAUSED, id="only_finished"
+            ),
+            pytest.param([DagRunState.RUNNING], DagSchedulingState.DRAINING, id="running"),
+            pytest.param([DagRunState.QUEUED], DagSchedulingState.DRAINING, id="queued"),
+            pytest.param([DagRunState.SUCCESS, DagRunState.RUNNING], DagSchedulingState.DRAINING, id="mixed"),
+        ],
+    )
+    def test_finalize_pauses_dag_without_unfinished_runs(self, session, run_states, expected_state):
+        dag_model = self._add_dag(session, "drained")
+        for i, state in enumerate(run_states):
+            self._add_run(session, "drained", state, run_id=f"run_{i}")
+
+        self._make_runner()._finalize_draining_dags(session)
+
+        session.refresh(dag_model)
+        assert dag_model.scheduling_state == expected_state
+        logs = session.scalars(select(Log).where(Log.event == "drain_completed")).all()
+        if expected_state == DagSchedulingState.PAUSED:
+            assert dag_model.is_paused is True
+            assert dag_model.is_draining is False
+            [log] = logs
+            assert (log.dag_id, log.owner) == ("drained", "scheduler")
+        else:
+            assert logs == []
+
+    @pytest.mark.parametrize(
+        ("completed", "with_run", "expected_state"),
+        [
+            pytest.param(False, False, DagSchedulingState.DRAINING, id="accepted_not_initialised"),
+            pytest.param(False, True, DagSchedulingState.PAUSED, id="initialised"),
+            pytest.param(True, False, DagSchedulingState.PAUSED, id="completed"),
+        ],
+    )
+    def test_finalize_waits_for_backfill_that_is_not_initialised(
+        self, session, completed, with_run, expected_state
+    ):
+        dag_model = self._add_dag(session, "drained")
+        self._add_backfill(session, "drained", completed=completed, with_run=with_run)
+
+        self._make_runner()._finalize_draining_dags(session)
+
+        session.refresh(dag_model)
+        assert dag_model.scheduling_state == expected_state
+
+    def test_finalize_ignores_backfill_of_other_dag(self, session):
+        dag_model = self._add_dag(session, "drained")
+        self._add_dag(session, "other", DagSchedulingState.ACTIVE)
+        self._add_backfill(session, "other")
+
+        self._make_runner()._finalize_draining_dags(session)
+
+        session.refresh(dag_model)
+        assert dag_model.scheduling_state == DagSchedulingState.PAUSED
+
+    def test_finalize_leaves_other_dags_untouched(self, session):
+        active = self._add_dag(session, "active", DagSchedulingState.ACTIVE)
+        paused = self._add_dag(session, "paused", DagSchedulingState.PAUSED)
+
+        self._make_runner()._finalize_draining_dags(session)
+
+        session.refresh(active)
+        session.refresh(paused)
+        assert active.scheduling_state == DagSchedulingState.ACTIVE
+        assert paused.scheduling_state == DagSchedulingState.PAUSED
+        assert session.scalars(select(Log).where(Log.event == "drain_completed")).all() == []
+
+    @mock.patch.object(DagModel, "NUM_DAGS_PER_DAGRUN_QUERY", 2)
+    def test_finalize_processes_dags_in_dag_id_order_up_to_the_limit(self, session):
+        dag_models = {dag_id: self._add_dag(session, dag_id) for dag_id in ("dag_c", "dag_a", "dag_b")}
+
+        runner = self._make_runner()
+        runner._finalize_draining_dags(session)
+        assert {d: m.scheduling_state for d, m in dag_models.items()} == {
+            "dag_a": DagSchedulingState.PAUSED,
+            "dag_b": DagSchedulingState.PAUSED,
+            "dag_c": DagSchedulingState.DRAINING,
+        }
+
+        runner._finalize_draining_dags(session)
+        assert dag_models["dag_c"].scheduling_state == DagSchedulingState.PAUSED
+
+    @mock.patch("airflow.jobs.scheduler_job_runner.with_row_locks", side_effect=with_row_locks)
+    def test_finalize_locks_dag_rows(self, mock_with_row_locks, session):
+        self._make_runner()._finalize_draining_dags(session)
+
+        _, kwargs = mock_with_row_locks.call_args
+        assert kwargs["of"] is DagModel
+        assert kwargs["skip_locked"] is True
+
+    def test_finalize_is_scheduled_every_five_seconds(self):
+        runner = self._make_runner()
+        with (
+            mock.patch.object(runner, "adopt_or_reset_orphaned_tasks"),
+            mock.patch("airflow.jobs.scheduler_job_runner.EventScheduler") as mock_timers_cls,
+            mock.patch.object(runner, "_do_scheduling", side_effect=RuntimeError("stop the loop")),
+            pytest.raises(RuntimeError, match="stop the loop"),
+        ):
+            runner._run_scheduler_loop()
+
+        mock_timers = mock_timers_cls.return_value
+        assert mock.call(5.0, runner._finalize_draining_dags) in mock_timers.call_regular_interval.mock_calls
+
+    @pytest.mark.parametrize(
+        ("state", "expected_queued"),
+        [
+            pytest.param(DagSchedulingState.ACTIVE, 1, id="active"),
+            pytest.param(DagSchedulingState.DRAINING, 1, id="draining"),
+            pytest.param(DagSchedulingState.PAUSED, 0, id="paused"),
+        ],
+    )
+    def test_tasks_of_running_runs_are_queued_unless_paused(self, dag_maker, session, state, expected_queued):
+        with dag_maker(dag_id="drain_tis", session=session):
+            EmptyOperator(task_id="task")
+        dag_maker.dag_model.set_scheduling_state(state)
+        dr = dag_maker.create_dagrun(state=DagRunState.RUNNING)
+        (ti,) = dr.task_instances
+        ti.state = TaskInstanceState.SCHEDULED
+        session.flush()
+
+        queued = self._make_runner()._executable_task_instances_to_queued(max_tis=32, session=session)
+
+        assert len(queued) == expected_queued
+
+    @pytest.mark.parametrize("state", [DagSchedulingState.ACTIVE, DagSchedulingState.DRAINING])
+    def test_unfinished_runs_of_draining_dag_are_examined(self, dag_maker, session, state):
+        with dag_maker(dag_id="drain_examine", session=session):
+            EmptyOperator(task_id="task")
+        dag_maker.dag_model.set_scheduling_state(state)
+        dr = dag_maker.create_dagrun(state=DagRunState.RUNNING)
+        session.flush()
+
+        examined = DagRun.get_running_dag_runs_to_examine(session=session, eagerly_load_dag_tags=False)
+
+        assert [r.id for r in examined] == [dr.id]
+
+    @pytest.mark.parametrize(
+        ("state", "expect_run"),
+        [
+            pytest.param(DagSchedulingState.DRAINING, False, id="draining"),
+            pytest.param(DagSchedulingState.ACTIVE, True, id="active"),
+        ],
+    )
+    @pytest.mark.need_serialized_dag
+    @pytest.mark.usefixtures("clear_asset_partition_rows")
+    def test_pending_partition_events_create_no_run_while_draining(
+        self, dag_maker: DagMaker, session: Session, state, expect_run
+    ):
+        asset = Asset(name="asset-draining")
+        [apdr] = _make_n_satisfied_apdrs(
+            consumer_dag_id="draining-partition-consumer",
+            asset=asset,
+            partition_keys=["k1"],
+            session=session,
+            dag_maker=dag_maker,
+        )
+        dag_model = session.get(DagModel, "draining-partition-consumer")
+        dag_model.set_scheduling_state(state)
+        session.commit()
+
+        created = self._make_runner()._create_dagruns_for_partitioned_asset_dags(session=session)
+
+        session.refresh(apdr)
+        assert (apdr.created_dag_run_id is not None) is expect_run
+        assert created == ({"draining-partition-consumer"} if expect_run else set())
