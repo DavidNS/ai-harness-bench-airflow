@@ -1,0 +1,70 @@
+{
+  "constraints": [
+    "Do not touch the React UI under airflow-core/src/airflow/ui",
+    "Do not change unrelated behaviour",
+    "`is_paused` keeps its meaning everywhere and existing clients that only know `is_paused` must keep working unchanged",
+    "Pause and unpause remain available from API and CLI",
+    "A Dag is never both paused and draining",
+    "Draining is transient and always converges to paused"
+  ],
+  "intents": [
+    {
+      "id": "INTENT1",
+      "key": "scheduling-state-enum",
+      "text": "Add enum `DagSchedulingState` in `airflow.utils.state` with exactly the string values `active`, `draining`, `paused`."
+    },
+    {
+      "id": "INTENT2",
+      "key": "model-and-migration",
+      "text": "Add non-null boolean `DagModel.is_draining` (default false, indexed, check constraint `NOT (is_paused AND is_draining)`), read-only `scheduling_state` property and `set_scheduling_state(state)` setting both flags consistently, with a 3.4.0 Alembic migration (also adding index on `backfill (dag_id, completed_at)`) and the migrations reference updated."
+    },
+    {
+      "id": "INTENT3",
+      "key": "scheduler-no-new-runs",
+      "text": "While a Dag is draining, exclude it from Dags needing scheduled runs, record asset events without queuing the Dag (direct, alias, name/URI), and create no run for its pending partitioned-asset events."
+    },
+    {
+      "id": "INTENT4",
+      "key": "scheduler-continues-inflight",
+      "text": "For a draining Dag, keep scheduling/queuing task instances of queued and running runs and examining unfinished runs as for an active Dag; explicit triggers (manual, operator, asset materialisation, backfill) remain allowed."
+    },
+    {
+      "id": "INTENT5",
+      "key": "drain-finalisation",
+      "text": "Add `SchedulerJobRunner._finalize_draining_dags(session)` run every 5 seconds in the scheduler loop, moving a draining Dag to paused when it has no queued/running run and no accepted-but-uninitialised backfill (backfill row without Dag runs), writing a `Log` entry with event `drain_completed`, owner `scheduler`, processing in `dag_id` order with per-query limit and row locks."
+    },
+    {
+      "id": "INTENT6",
+      "key": "auto-pause-clears-draining",
+      "text": "Automatic pausing after the configured consecutive failed runs pauses the Dag and clears draining."
+    },
+    {
+      "id": "INTENT7",
+      "key": "public-api",
+      "text": "Add `scheduling_state` (default `active`) to `DAGResponse` and `DAGDetailsResponse`; `PATCH /dags/{dag_id}` and `PATCH /dags` require exactly one non-null of `is_paused`/`scheduling_state` (else 422, explicit null for the unused field accepted), `update_mask` may name one of them and a mismatch with the body is 422, responses reflect the new state, bulk PATCH sets both flags, and `is_paused` clients behave as before (clearing draining)."
+    },
+    {
+      "id": "INTENT8",
+      "key": "ui-api",
+      "text": "In `/ui/dags` add a `scheduling_state` filter (existing `paused` filter unchanged, `paused=false` includes draining), add `has_unfinished_runs` to every listed Dag independent of `dag_runs_limit`, and exclude draining Dags from dashboard `active_dag_count`."
+    },
+    {
+      "id": "INTENT9",
+      "key": "cli",
+      "text": "`airflow dags pause`/`unpause` set paused/active and clear draining (a draining Dag counts as needing change), and `dags details` includes `scheduling_state`."
+    },
+    {
+      "id": "INTENT10",
+      "key": "docs-newsfragment",
+      "text": "Document draining in the Dag concepts page and FAQ and add a newsfragment announcing it."
+    },
+    {
+      "id": "INTENT11",
+      "key": "tests",
+      "text": "Add or extend unit tests for the model, scheduler, asset manager, public and UI REST routes and CLI, keeping existing suites green."
+    }
+  ],
+  "request": "Add a \"draining\" scheduling state for Dags (issue #22006): an operator stops new scheduled runs\nwhile the work already in flight finishes, and the Dag ends up paused on its own.\n\nPausing a Dag today is abrupt. Running task instances finish, but queued and downstream tasks of\nthe current runs are stranded until the Dag is unpaused, and nothing says \"stop starting new runs,\nlet the current ones complete\". That bites during upgrades and maintenance windows; the workaround\nin the wild is to set every schedule to None, wait, do the work, and put the schedules back. The\ndesign agreed on the issue: a third mode next to paused and unpaused, \"drain, then pause\", that is\ntransient and switches to paused by itself when the drain is complete. Pause and unpause stay\navailable from the API and the CLI as today, and existing clients that only know `is_paused` must\nkeep working unchanged.\n\nBehaviour to deliver:\n\n- States. A Dag's scheduling state is `active`, `draining` or `paused` (enum `DagSchedulingState`\n  in `airflow.utils.state`, with exactly those string values). `draining` is transient and always\n  converges to `paused`; the resting states remain `active` and `paused`. A Dag is never paused and\n  draining at the same time.\n- Model and migration. `DagModel` gets a non-null boolean column `is_draining` (default false,\n  indexed, with the check constraint `NOT (is_paused AND is_draining)`), a read-only property\n  `scheduling_state` derived from the two flags, and `set_scheduling_state(state)` that sets both\n  flags consistently. The Alembic migration belongs to 3.4.0 (migrations reference updated) and\n  also adds an index on `backfill (dag_id, completed_at)`, which the scheduler needs to find a\n  backfill that is accepted but not yet initialised. `is_paused` keeps its meaning everywhere.\n- Scheduler, while a Dag is draining. No new scheduler-created runs: the Dag is excluded from the\n  Dags needing a run (scheduled runs), an asset event is still recorded but does not queue the Dag\n  (whether it is scheduled on the asset directly, through an alias, or by asset name or URI), and\n  no run is created for pending partitioned-asset events of the Dag. Task instances of its queued\n  and running runs keep being scheduled and queued exactly as for an active Dag (unlike a paused\n  Dag), and its unfinished runs keep being examined. Explicit triggers (manual, operator-triggered,\n  asset materialisation, backfill) remain available while draining, as they are for a paused Dag,\n  and simply extend the drain until the resulting work finishes.\n- Finalisation. The scheduler runs a step `_finalize_draining_dags(session)` on\n  `SchedulerJobRunner` every 5 seconds in its loop. It moves a draining Dag to `paused` once the\n  Dag has no unfinished run (queued or running) and no backfill that is accepted but not yet\n  initialised (a backfill row without associated Dag runs: the backfill is committed before its\n  runs exist), and it records an audit `Log` entry with event `drain_completed` for that Dag, owner\n  `scheduler`. Dags are processed in `dag_id` order with the usual per-query limit and row locks.\n- Automatic pausing after the configured number of consecutive failed runs pauses the Dag and\n  clears draining.\n- Public REST API. `DAGResponse` and `DAGDetailsResponse` gain `scheduling_state` (default\n  `active`). `PATCH /dags/{dag_id}` and `PATCH /dags` accept either `is_paused` (boolean) or\n  `scheduling_state`: exactly one of the two must be non-null, otherwise 422 (both present, both\n  null, or the only field sent as null). Generated clients send the field they are not using as an\n  explicit null, which is accepted. `update_mask` may name `is_paused` or `scheduling_state`, one\n  of them; a mask that names the other field than the one the body carries is a 422. The response\n  reflects the new state; the bulk PATCH sets both flags for every matched Dag. Clients that send\n  `is_paused` behave as before (true pauses, false activates, and both clear draining).\n- UI API (`/ui/dags`). A `scheduling_state` filter (`active`, `draining`, `paused`); the existing\n  `paused` filter keeps its meaning (`paused=false` includes draining Dags). Every Dag in the list\n  carries `has_unfinished_runs`, true when any queued or running run exists, regardless of\n  `dag_runs_limit` (which only limits the latest runs shown). The dashboard's `active_dag_count`\n  does not count draining Dags.\n- CLI. `airflow dags pause` and `airflow dags unpause` set `paused` and `active` respectively and\n  clear draining; a draining Dag counts as a Dag the command has to change. `dags details`\n  includes `scheduling_state`.\n- Documentation: the Dag concepts page and the FAQ describe draining; a newsfragment announces it.\n\nOut of scope: the React UI under `airflow-core/src/airflow/ui` is handled in a separate change; do\nnot touch it. Do not change unrelated behaviour.\n\nAdd or extend the unit tests for the model, the scheduler, the asset manager, the public and UI\nREST routes and the CLI. The existing test suites must stay green.",
+  "rounds": [],
+  "summary": ""
+}

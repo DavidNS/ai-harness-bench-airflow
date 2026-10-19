@@ -1,0 +1,52 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 77 items / 42 deselected / 35 selected
+
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params0-expected_ids0-11] PASSED [  2%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params1-expected_ids1-2] PASSED [  5%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params2-expected_ids2-11] PASSED [  8%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params3-expected_ids3-6] PASSED [ 11%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params4-expected_ids4-15] PASSED [ 14%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params5-expected_ids5-4] PASSED [ 17%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params6-expected_ids6-11] PASSED [ 20%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params7-expected_ids7-11] PASSED [ 22%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params8-expected_ids8-4] PASSED [ 25%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params9-expected_ids9-6] PASSED [ 28%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params10-expected_ids10-11] PASSED [ 31%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params11-expected_ids11-6] PASSED [ 34%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params12-expected_ids12-9] PASSED [ 37%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params13-expected_ids13-6] PASSED [ 40%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params14-expected_ids14-5] PASSED [ 42%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params15-expected_ids15-6] PASSED [ 45%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params16-expected_ids16-5] PASSED [ 48%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params17-expected_ids17-11] PASSED [ 51%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params18-expected_ids18-0] PASSED [ 54%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params19-expected_ids19-11] PASSED [ 57%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params20-expected_ids20-0] PASSED [ 60%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params21-expected_ids21-11] PASSED [ 62%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params22-expected_ids22-0] PASSED [ 65%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200[query_params23-expected_ids23-0] PASSED [ 68%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_scheduling_state_filter[query_params0-expected_ids0] PASSED [ 71%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_scheduling_state_filter[query_params1-expected_ids1] PASSED [ 74%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_scheduling_state_filter[query_params2-expected_ids2] PASSED [ 77%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_scheduling_state_filter[query_params3-expected_ids3] PASSED [ 80%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_scheduling_state_filter[query_params4-expected_ids4] PASSED [ 82%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_has_unfinished_runs_ignores_dag_runs_limit[queued] PASSED [ 85%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_has_unfinished_runs_ignores_dag_runs_limit[running] PASSED [ 88%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200_with_hitl[None-3-None] PASSED [ 91%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_should_return_200_with_hitl[True-1-expected_pending_actions1] PASSED [ 94%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_get_dags_no_n_plus_one_queries PASSED [ 97%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_latest_run_should_return_200 PASSED [100%]
+==================== Warning summary. Total: 69, Unique: 3 =====================
+other: total 68, unique 2
+  runtest: total 68, unique 2
+tests: total 1, unique 1
+  collect: total 1, unique 1
+Warnings saved into /work/tree/devel-common/warnings.txt file.
+
+================ 35 passed, 42 deselected, 3 warnings in 23.88s ================

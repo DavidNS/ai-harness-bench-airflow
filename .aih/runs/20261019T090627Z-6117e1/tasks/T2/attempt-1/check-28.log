@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 6 items
+
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_scheduling_state_flags PASSED [ 16%]
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_scheduling_state_is_read_only PASSED [ 33%]
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_db_rejects_paused_and_draining PASSED [ 50%]
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_dags_needing_dagruns_skips_draining PASSED [ 66%]
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_auto_pause_clears_draining PASSED [ 83%]
+airflow-core/tests/unit/models/aih_probe_drain_models.py::test_probe_draining_runs_still_examined PASSED [100%]
+
+======================== 6 passed, 1 warning in 10.99s =========================

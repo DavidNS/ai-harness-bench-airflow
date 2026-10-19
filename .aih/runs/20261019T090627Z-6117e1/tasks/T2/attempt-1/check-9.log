@@ -1,0 +1,33 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 18 items
+
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_should_response_200[params0-expected0] PASSED [  5%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_should_response_200[params1-expected1] PASSED [ 11%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_should_response_200[params2-expected2] PASSED [ 16%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_exact_limit_applies_per_group[both-counted-exactly] PASSED [ 22%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_exact_limit_applies_per_group[dag-runs-exact-task-instances-bounded] PASSED [ 27%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_exact_limit_applies_per_group[neither-counted-exactly] PASSED [ 33%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_should_response_401 PASSED [ 38%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestHistoricalMetricsDataEndpoint::test_should_response_403 PASSED [ 44%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_200_multiple_dags PASSED [ 50%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_200_single_dag PASSED [ 55%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_draining_dag_is_not_counted_as_active PASSED [ 61%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_200_failed_dag PASSED [ 66%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_200_queued_dag PASSED [ 72%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_200_no_dag_runs PASSED [ 77%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_401 PASSED [ 83%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::TestDagStatsEndpoint::test_should_response_403 PASSED [ 88%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::test_compute_state_counts_rounds_only_lower_bounds[bounded-counts-rounded-down] PASSED [ 94%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py::test_compute_state_counts_rounds_only_lower_bounds[exact-counts-left-alone] PASSED [100%]
+==================== Warning summary. Total: 26, Unique: 2 =====================
+other: total 26, unique 2
+  runtest: total 26, unique 2
+Warnings saved into /work/tree/devel-common/warnings.txt file.
+
+======================= 18 passed, 3 warnings in 13.63s ========================

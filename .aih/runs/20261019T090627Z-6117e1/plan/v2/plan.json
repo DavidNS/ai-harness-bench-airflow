@@ -1,0 +1,472 @@
+{
+  "criteria": [
+    {
+      "id": "ACC19",
+      "intent": "INTENT1",
+      "key": "C1",
+      "kind": "behavior",
+      "text": "DagSchedulingState has exactly members/values active, draining, paused (test_state.py)."
+    },
+    {
+      "id": "ACC20",
+      "intent": "INTENT2",
+      "key": "C2",
+      "kind": "behavior",
+      "text": "DagModel.scheduling_state derives active/draining/paused from flags; set_scheduling_state sets both flags consistently; is_draining defaults to false; the DB rejects is_paused and is_draining both true."
+    },
+    {
+      "id": "ACC21",
+      "intent": "INTENT2",
+      "key": "C3",
+      "kind": "other",
+      "text": "Migration 0134 (3.4.0) adds is_draining column with index and check constraint plus index idx_backfill_dag_id_completed_at on backfill (dag_id, completed_at); Backfill.__table_args__ declares the same index; utils/db.py head map and migrations-ref.rst updated."
+    },
+    {
+      "id": "ACC22",
+      "intent": "INTENT3",
+      "key": "C4",
+      "kind": "behavior",
+      "text": "A draining Dag is not returned by dags_needing_dagruns for scheduled runs, and no run is created for its pending partitioned-asset events."
+    },
+    {
+      "id": "ACC23",
+      "intent": "INTENT3",
+      "key": "C5",
+      "kind": "behavior",
+      "text": "AssetManager records the asset event but does not queue a draining Dag scheduled directly, via alias, or by name/URI; active Dags still queue."
+    },
+    {
+      "id": "ACC24",
+      "intent": "INTENT4",
+      "key": "C6",
+      "kind": "behavior",
+      "text": "Task instances of queued/running runs of a draining Dag are still scheduled and queued, and its unfinished runs are still examined; manual triggers still create runs."
+    },
+    {
+      "id": "ACC25",
+      "intent": "INTENT5",
+      "key": "C7",
+      "kind": "behavior",
+      "text": "_finalize_draining_dags moves a draining Dag with no queued/running run and no backfill without Dag runs to paused, clears draining and logs drain_completed with owner scheduler."
+    },
+    {
+      "id": "ACC26",
+      "intent": "INTENT5",
+      "key": "C8",
+      "kind": "behavior",
+      "text": "_finalize_draining_dags leaves a Dag draining when it has a queued or running run, or a backfill row with no Dag runs; processes in dag_id order with limit and row locks."
+    },
+    {
+      "id": "ACC27",
+      "intent": "INTENT5",
+      "key": "C9",
+      "kind": "behavior",
+      "text": "The scheduler loop registers _finalize_draining_dags with a 5 second interval."
+    },
+    {
+      "id": "ACC28",
+      "intent": "INTENT6",
+      "key": "C10",
+      "kind": "behavior",
+      "text": "Auto-pause after consecutive failed runs sets is_paused true and is_draining false for a draining Dag."
+    },
+    {
+      "id": "ACC29",
+      "intent": "INTENT7",
+      "key": "C11",
+      "kind": "behavior",
+      "text": "DAGResponse/DAGDetailsResponse expose scheduling_state defaulting to active; GET reflects draining."
+    },
+    {
+      "id": "ACC30",
+      "intent": "INTENT7",
+      "key": "C12",
+      "kind": "behavior",
+      "text": "PATCH /dags/{dag_id} and PATCH /dags accept exactly one non-null of is_paused/scheduling_state (explicit null for the other accepted); both, neither, or a null-only field yield 422."
+    },
+    {
+      "id": "ACC31",
+      "intent": "INTENT7",
+      "key": "C13",
+      "kind": "behavior",
+      "text": "update_mask naming is_paused or scheduling_state works when matching the body; a mask naming the other field is 422; response reflects new state; bulk PATCH sets both flags; is_paused true/false clears draining."
+    },
+    {
+      "id": "ACC32",
+      "intent": "INTENT8",
+      "key": "C14",
+      "kind": "behavior",
+      "text": "/ui/dags scheduling_state filter returns only matching Dags; paused=false includes draining; paused filter otherwise unchanged."
+    },
+    {
+      "id": "ACC33",
+      "intent": "INTENT8",
+      "key": "C15",
+      "kind": "behavior",
+      "text": "Every Dag in /ui/dags has has_unfinished_runs true iff a queued/running run exists, regardless of dag_runs_limit."
+    },
+    {
+      "id": "ACC34",
+      "intent": "INTENT8",
+      "key": "C16",
+      "kind": "behavior",
+      "text": "Dashboard active_dag_count excludes draining Dags."
+    },
+    {
+      "id": "ACC35",
+      "intent": "INTENT9",
+      "key": "C17",
+      "kind": "behavior",
+      "text": "airflow dags pause sets paused and clears draining; unpause sets active and clears draining; a draining Dag counts as changed by both; dags details output includes scheduling_state."
+    },
+    {
+      "id": "ACC36",
+      "intent": "INTENT10",
+      "key": "C18",
+      "kind": "other",
+      "text": "dags.rst and faq.rst describe draining; newsfragment airflow-core/newsfragments/22006.feature.rst added; 'Dag' casing used in prose."
+    }
+  ],
+  "frozen_at": "2026-10-19T09:16:40+00:00",
+  "intents": [
+    {
+      "evidence": [
+        {
+          "end": 97,
+          "path": "airflow-core/src/airflow/utils/state.py",
+          "quote": "class DagRunState(str, Enum):",
+          "start": 97
+        }
+      ],
+      "intent": "INTENT1",
+      "rationale": "Add DagSchedulingState str Enum (active, draining, paused) next to DagRunState.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 323,
+          "path": "airflow-core/src/airflow/models/dag.py",
+          "quote": "is_paused: Mapped[bool] = mapped_column(Boolean, default=is_paused_at_creation)",
+          "start": 323
+        },
+        {
+          "end": 120,
+          "path": "airflow-core/src/airflow/utils/db.py",
+          "quote": "\"3.4.0\": \"f8c2a1d94e03\",",
+          "start": 120
+        }
+      ],
+      "intent": "INTENT2",
+      "rationale": "DagModel only has is_paused; add is_draining column, check constraint, property, setter, migration 0134 (down_revision f8c2a1d94e03), the Backfill model index so ORM metadata matches the migration, db.py head map and migrations-ref.rst.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 354,
+          "path": "airflow-core/src/airflow/assets/manager.py",
+          "quote": "if not ref.dag.is_paused",
+          "start": 354
+        }
+      ],
+      "intent": "INTENT3",
+      "rationale": "Scheduler's dag-needing-run query, asset manager queuing (direct, alias, name/uri) and partitioned-asset run creation currently only filter on is_paused; add draining exclusion.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 748,
+          "path": "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+          "quote": ".where(~DM.is_paused)",
+          "start": 748
+        }
+      ],
+      "intent": "INTENT4",
+      "rationale": "TI scheduling filters on is_paused only, so draining Dags already pass; keep that, ensure the new exclusions do not leak into TI queuing or run examination, and cover with tests.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 1856,
+          "path": "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+          "quote": "timers.call_regular_interval(60.0, self._update_dag_run_state_for_paused_dags)",
+          "start": 1856
+        }
+      ],
+      "intent": "INTENT5",
+      "rationale": "New _finalize_draining_dags step registered via timers.call_regular_interval(5.0, ...) in the scheduler loop.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 1029,
+          "path": "airflow-core/src/airflow/models/dagrun.py",
+          "quote": ".values(is_paused=True)",
+          "start": 1029
+        }
+      ],
+      "intent": "INTENT6",
+      "rationale": "Auto-pause update sets only is_paused=True; also set is_draining=False.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [],
+      "intent": "INTENT7",
+      "rationale": "Public datamodels and PATCH routes handle only is_paused; add scheduling_state, exactly-one validation, update_mask handling, bulk PATCH setting both flags, regenerate openapi yaml.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 155,
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py",
+          "quote": "func.coalesce(func.sum(case((DagModel.is_paused == false(), 1))), 0).label(\"active\")",
+          "start": 155
+        },
+        {
+          "end": 1302,
+          "path": "airflow-core/src/airflow/api_fastapi/common/parameters.py",
+          "quote": "filter_param_factory(DagModel.is_paused, bool | None, filter_name=\"paused\")",
+          "start": 1302
+        }
+      ],
+      "intent": "INTENT8",
+      "rationale": "Add scheduling_state filter param, has_unfinished_runs on UI Dag responses (independent of dag_runs_limit), and make dashboard active count exclude draining.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [
+        {
+          "end": 273,
+          "path": "airflow-core/src/airflow/cli/commands/dag_command.py",
+          "quote": "query = query.where(DagModel.is_paused != is_paused)",
+          "start": 273
+        }
+      ],
+      "intent": "INTENT9",
+      "rationale": "set_is_paused CLI helper filters on is_paused != target and sets only is_paused; change to set scheduling state and treat draining as needing change; add scheduling_state to dags details.",
+      "resolution": "change"
+    },
+    {
+      "evidence": [],
+      "intent": "INTENT10",
+      "rationale": "Document draining in Dag concepts and FAQ; add airflow-core newsfragment (user-facing feature).",
+      "resolution": "change"
+    },
+    {
+      "evidence": [],
+      "intent": "INTENT11",
+      "rationale": "Extend existing suites for the model, scheduler, asset manager, public/UI routes, CLI and state enum.",
+      "resolution": "change"
+    }
+  ],
+  "run_id": "20261019T090627Z-6117e1",
+  "summary": "The request ships as one PR, so the plan is a single task. This revision adds `airflow-core/src/airflow/models/backfill.py` to the editable files. It needs `Index(\"idx_backfill_dag_id_completed_at\", dag_id, completed_at)` in `Backfill.__table_args__` so the ORM metadata matches migration 0134. I did not verify the paths for the UI datamodels, `common/db/dags.py` or the new migration, so the implementer should confirm them. Regenerating the airflow-ctl and task-sdk clients is not planned, and the React UI is untouched.",
+  "tasks": [
+    {
+      "criteria": [
+        "ACC19",
+        "ACC20",
+        "ACC21",
+        "ACC22",
+        "ACC23",
+        "ACC24",
+        "ACC25",
+        "ACC26",
+        "ACC27",
+        "ACC28",
+        "ACC29",
+        "ACC30",
+        "ACC31",
+        "ACC32",
+        "ACC33",
+        "ACC34",
+        "ACC35",
+        "ACC36"
+      ],
+      "depends_on": [],
+      "files": [
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/utils/state.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/models/dag.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/models/backfill.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/models/dagrun.py",
+          "role": "production"
+        },
+        {
+          "action": "create",
+          "path": "airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/utils/db.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/docs/migrations-ref.rst",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/assets/manager.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/common/parameters.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/common/db/dags.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/src/airflow/cli/commands/dag_command.py",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/docs/core-concepts/dags.rst",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/docs/faq.rst",
+          "role": "production"
+        },
+        {
+          "action": "create",
+          "path": "airflow-core/newsfragments/22006.feature.rst",
+          "role": "production"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/utils/test_state.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/models/test_dag.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/models/test_dagrun.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/assets/test_manager.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py",
+          "role": "test"
+        },
+        {
+          "action": "modify",
+          "path": "airflow-core/tests/unit/cli/commands/test_dag_command.py",
+          "role": "test"
+        }
+      ],
+      "id": "T2",
+      "key": "T1",
+      "summary": "Single PR: add DagSchedulingState enum, then DagModel column/property/setter, Backfill index in __table_args__ and migration 0134 (db.py head map, migrations-ref); then scheduler changes (dags_needing_dagruns, partitioned-asset runs, _finalize_draining_dags + 5s timer), asset manager, dagrun auto-pause; then public and UI API (datamodels, PATCH validation, filter, has_unfinished_runs, dashboard, openapi yamls), CLI; then docs, newsfragment; extend/adjust existing tests alongside each layer. Do not touch the React UI.",
+      "tests": [
+        "airflow-core/tests/unit/utils/test_state.py",
+        "airflow-core/tests/unit/models/test_dag.py",
+        "airflow-core/tests/unit/models/test_dagrun.py",
+        "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+        "airflow-core/tests/unit/assets/test_manager.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py",
+        "airflow-core/tests/unit/cli/commands/test_dag_command.py"
+      ]
+    }
+  ],
+  "version": 2
+}

@@ -1,0 +1,83 @@
+{
+  "criteria_notes": [
+    {
+      "criterion": "ACC1",
+      "note": "Done: `DagSchedulingState` added in `utils/state.py`, and `test_dag_scheduling_state_values` in `test_state.py` covers it. I haven't run it."
+    },
+    {
+      "criterion": "ACC2",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC3",
+      "note": "Blocked: the `backfill (dag_id, completed_at)` model index needs `models/backfill.py`."
+    },
+    {
+      "criterion": "ACC4",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC5",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC6",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC7",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC8",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC9",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC10",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC11",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC12",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC13",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC14",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC15",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC16",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC17",
+      "note": "Not started."
+    },
+    {
+      "criterion": "ACC18",
+      "note": "Not started."
+    }
+  ],
+  "replan_request": {
+    "files": [
+      "airflow-core/src/airflow/models/backfill.py"
+    ],
+    "reason": "Migration 0134 must add an index on backfill (dag_id, completed_at). For the ORM metadata to match the migration, the Backfill model has to declare that index, and models/backfill.py is not in the editable file list. Please add it so I can add Index(\"idx_backfill_dag_id_completed_at\", dag_id, completed_at) to Backfill.__table_args__."
+  },
+  "summary": "Stopped before the migration and scheduler work because the task needs `airflow-core/src/airflow/models/backfill.py`, which isn't on the editable list. The only edits so far are the `DagSchedulingState` enum in `utils/state.py` and its test in `test_state.py`. I haven't run any tests, because `aih check` isn't configured for builds and I haven't run the test file.\n\nThe spec requires migration 0134 to add an index on `backfill (dag_id, completed_at)`. The `Backfill` model in `models/backfill.py` has no `__table_args__` and no index on that table, so it needs `Index(\"idx_backfill_dag_id_completed_at\", dag_id, completed_at)` (the repo naming convention gives `idx_<columns>`). Without that edit, the ORM metadata and the migration disagree, and the migration-versus-model consistency check fails.\n\nDeclaring the index from `models/dag.py` would only work by reaching into the Backfill table from the wrong file. I don't want to do that without a go-ahead.\n\nPlease add `airflow-core/src/airflow/models/backfill.py` to the editable files and re-plan. I'd keep T1 otherwise as planned."
+}

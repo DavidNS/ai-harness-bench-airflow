@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 109 items / 89 deselected / 20 selected
+
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_cli_get_dag_details PASSED [  5%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_dagbag_dag_col PASSED [ 10%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause PASSED [ 15%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_unpause_change_draining_dag[pause] PASSED [ 20%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_unpause_change_draining_dag[unpause] PASSED [ 25%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_cli_get_dag_details_includes_scheduling_state PASSED [ 30%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_unpause_from_dag_cli PASSED [ 35%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_from_dag_cli_ignores_treat_dag_id_as_regex PASSED [ 40%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_regex PASSED [ 45%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_regex_operation_cancelled PASSED [ 50%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_regex_yes PASSED [ 55%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_non_existing_dag_do_not_error PASSED [ 60%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_unpause_non_existing_dag_do_not_error PASSED [ 65%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_unpause_already_unpaused_dag_do_not_error PASSED [ 70%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pausing_already_paused_dag_do_not_error PASSED [ 75%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestDagDetailsIsBackfillable::test_is_backfillable[periodic-allowed-none] PASSED [ 80%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestDagDetailsIsBackfillable::test_is_backfillable[periodic-backfill-included] PASSED [ 85%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestDagDetailsIsBackfillable::test_is_backfillable[periodic-backfill-excluded] PASSED [ 90%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestDagDetailsIsBackfillable::test_is_backfillable[non-periodic-null-schedule] PASSED [ 95%]
+airflow-core/tests/unit/cli/commands/test_dag_command.py::TestDagDetailsIsBackfillable::test_is_backfillable[non-periodic-once-schedule] PASSED [100%]
+==================== Warning summary. Total: 50, Unique: 14 ====================
+other: total 11, unique 4
+  collect: total 1, unique 1
+  runtest: total 10, unique 3
+tests: total 39, unique 10
+  collect: total 1, unique 1
+  runtest: total 38, unique 9
+Warnings saved into /work/tree/devel-common/warnings.txt file.
+
+================ 20 passed, 89 deselected, 1 warning in 15.73s =================

@@ -1,0 +1,51 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 238 items / 235 deselected / 3 selected
+
+airflow-core/tests/unit/utils/test_state.py::test_dagrun_state_enum_escape PASSED [ 33%]
+airflow-core/tests/unit/utils/test_state.py::test_dag_scheduling_state_members PASSED [ 66%]
+airflow-core/tests/unit/models/test_dagrun.py::TestDagRun::test_draining_dag_runs_are_still_examined FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________ TestDagRun.test_draining_dag_runs_are_still_examined _____________
+airflow-core/tests/unit/models/test_dagrun.py:1119: in test_draining_dag_runs_are_still_examined
+    assert DagRun.get_running_dag_runs_to_examine(session=session).all() == [running]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+airflow-core/src/airflow/utils/retries.py:98: in wrapped_function
+    for attempt in run_with_db_retries(max_retries=retries, logger=logger, **retry_kwargs):
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/tenacity/__init__.py:438: in __iter__
+    do = self.iter(retry_state=retry_state)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/tenacity/__init__.py:371: in iter
+    result = action(retry_state)
+             ^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/tenacity/__init__.py:393: in <lambda>
+    self._add_action_func(lambda rs: rs.outcome.result())
+                                     ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/concurrent/futures/_base.py:449: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+airflow-core/src/airflow/utils/retries.py:107: in wrapped_function
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+E   TypeError: DagRun.get_running_dag_runs_to_examine() missing 1 required keyword-only argument: 'eagerly_load_dag_tags'
+---------------------------- Captured stdout setup -----------------------------
+2026-10-19T09:21:52.910883Z [info     ] Filling up the DagBag from /dev/null [airflow.dag_processing.dagbag.DagBag]
+----------------------------- Captured stdout call -----------------------------
+2026-10-19T09:21:52.916792Z [info     ] Bulk-writing dags to db        [airflow.serialization.definitions.dag] count=1
+2026-10-19T09:21:52.919138Z [info     ] Creating ORM DAG for draining_dag_runs_examined [airflow.dag_processing.collection]
+2026-10-19T09:21:52.921159Z [info     ] get next_dagrun_info_v2        [airflow.serialization.definitions.dag] last_automated_run_info=None next_info=DagRunInfo(run_after=DateTime(2026, 10, 19, 0, 0, 0, tzinfo=Timezone('UTC')), data_interval=DataInterval(start=DateTime(2026, 10, 18, 0, 0, 0, tzinfo=Timezone('UTC')), end=DateTime(2026, 10, 19, 0, 0, 0, tzinfo=Timezone('UTC'))), partition_date=None, partition_key=None)
+2026-10-19T09:21:52.921337Z [info     ] setting next dagrun info       [airflow.models.dag] next_dagrun='2026-10-18 00:00:00+00:00' next_dagrun_create_after='2026-10-19 00:00:00+00:00' next_dagrun_data_interval_end='2026-10-19 00:00:00+00:00' next_dagrun_data_interval_start='2026-10-18 00:00:00+00:00' next_dagrun_partition_date=None next_dagrun_partition_key=None
+2026-10-19T09:21:52.968864Z [info     ] creating dag run               [airflow.serialization.definitions.dag] logical_date=DateTime(2016, 1, 1, 0, 0, 0, tzinfo=Timezone('UTC')) partition_key=None run_after=DateTime(2016, 1, 1, 0, 0, 0, tzinfo=Timezone('UTC')) run_id=running
+2026-10-19T09:21:52.981332Z [info     ] creating dag run               [airflow.serialization.definitions.dag] logical_date=DateTime(2016, 1, 2, 0, 0, 0, tzinfo=Timezone('UTC')) partition_key=None run_after=DateTime(2016, 1, 2, 0, 0, 0, tzinfo=Timezone('UTC')) run_id=queued
+=========================== short test summary info ============================
+FAILED airflow-core/tests/unit/models/test_dagrun.py::TestDagRun::test_draining_dag_runs_are_still_examined
+=========== 1 failed, 2 passed, 235 deselected, 1 warning in 12.11s ============

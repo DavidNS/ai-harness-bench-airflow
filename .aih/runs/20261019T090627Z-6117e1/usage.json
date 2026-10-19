@@ -1,0 +1,129 @@
+{
+  "cache_creation_input_tokens": 595392.0,
+  "cache_read_input_tokens": 23357048.0,
+  "cost_usd": 6.474187,
+  "duration_ms": 3856188,
+  "input_tokens": 342.0,
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "num_turns": 384,
+  "output_tokens": 175623.0,
+  "sessions": [
+    {
+      "cache_creation_input_tokens": 16953,
+      "cache_read_input_tokens": 4771,
+      "cost_usd": 0.08158309999999999,
+      "duration_ms": 8400,
+      "input_tokens": 2,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 2,
+      "output_tokens": 1329,
+      "purpose": "intake",
+      "session_id": "22f73c78-3e7d-47ab-aa96-f627112caff7"
+    },
+    {
+      "cache_creation_input_tokens": 35213,
+      "cache_read_input_tokens": 209595,
+      "cost_usd": 0.30830349999999995,
+      "duration_ms": 106644,
+      "input_tokens": 16,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 22,
+      "output_tokens": 14646,
+      "purpose": "plan",
+      "session_id": "4afd5240-6c75-4f35-9005-eae95f04a245"
+    },
+    {
+      "cache_creation_input_tokens": 47804,
+      "cache_read_input_tokens": 412706,
+      "cost_usd": 0.2948906,
+      "duration_ms": 465558,
+      "input_tokens": 22,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 27,
+      "output_tokens": 6236,
+      "purpose": "implement",
+      "session_id": "6baa24d4-fc6e-4d79-8476-2e9df656ee21"
+    },
+    {
+      "cache_creation_input_tokens": 9969.0,
+      "cache_read_input_tokens": 40507.0,
+      "cost_usd": 0.100591,
+      "duration_ms": 27779,
+      "input_tokens": 2.0,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 2,
+      "output_tokens": 5666.0,
+      "purpose": "plan",
+      "resumed": true,
+      "session_id": "4afd5240-6c75-4f35-9005-eae95f04a245"
+    },
+    {
+      "cache_creation_input_tokens": 304863,
+      "cache_read_input_tokens": 17695457,
+      "cost_usd": 3.845099699999999,
+      "duration_ms": 1995480,
+      "input_tokens": 216,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 261,
+      "output_tokens": 85567,
+      "purpose": "implement",
+      "session_id": "e831e919-c051-4a95-9296-77ded3461309"
+    },
+    {
+      "cache_creation_input_tokens": 29304.0,
+      "cache_read_input_tokens": 1318518.0,
+      "cost_usd": 0.280554,
+      "duration_ms": 504504,
+      "input_tokens": 8.0,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 7,
+      "output_tokens": 3147.0,
+      "purpose": "implement",
+      "resumed": true,
+      "session_id": "e831e919-c051-4a95-9296-77ded3461309"
+    },
+    {
+      "cache_creation_input_tokens": 64152,
+      "cache_read_input_tokens": 229356,
+      "cost_usd": 0.3204036,
+      "duration_ms": 56550,
+      "input_tokens": 10,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 7,
+      "output_tokens": 4084,
+      "purpose": "review",
+      "session_id": "57177f52-1ac4-4560-99f2-8eb523e7a748"
+    },
+    {
+      "cache_creation_input_tokens": 87134.0,
+      "cache_read_input_tokens": 3446138.0,
+      "cost_usd": 1.242762,
+      "duration_ms": 691273,
+      "input_tokens": 66.0,
+      "models": [
+        "claude-sonnet-5-5"
+      ],
+      "num_turns": 56,
+      "output_tokens": 54948.0,
+      "purpose": "review",
+      "resumed": true,
+      "session_id": "57177f52-1ac4-4560-99f2-8eb523e7a748"
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+[
+  {
+    "action": "modify",
+    "path": "airflow-core/docs/core-concepts/dags.rst",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/docs/faq.rst",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/docs/migrations-ref.rst",
+    "role": "production"
+  },
+  {
+    "action": "create",
+    "path": "airflow-core/newsfragments/22006.feature.rst",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/common/parameters.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/assets/manager.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/cli/commands/dag_command.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+    "role": "production"
+  },
+  {
+    "action": "create",
+    "path": "airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/models/backfill.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/models/dag.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/models/dagrun.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/utils/db.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/src/airflow/utils/state.py",
+    "role": "production"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/assets/test_manager.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/cli/commands/test_dag_command.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/models/test_dag.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/models/test_dagrun.py",
+    "role": "test"
+  },
+  {
+    "action": "modify",
+    "path": "airflow-core/tests/unit/utils/test_state.py",
+    "role": "test"
+  }
+]

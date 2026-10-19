@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 11 items
+
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params0-expected0] PASSED [  9%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params1-expected1] PASSED [ 18%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params2-expected2] PASSED [ 27%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params3-expected3] PASSED [ 36%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params4-expected4] PASSED [ 45%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_scheduling_state_filter[params5-expected5] PASSED [ 54%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_has_unfinished_runs_regardless_of_limit[1] PASSED [ 63%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_has_unfinished_runs_regardless_of_limit[2] PASSED [ 72%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_has_unfinished_runs_regardless_of_limit[10] PASSED [ 81%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_queued_run_counts_as_unfinished PASSED [ 90%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/ui/aih_probe_drain_ui.py::test_probe_dashboard_active_count_excludes_draining PASSED [100%]
+==================== Warning summary. Total: 20, Unique: 2 =====================
+other: total 20, unique 2
+  runtest: total 20, unique 2
+Warnings saved into /work/tree/devel-common/warnings.txt file.
+
+======================= 11 passed, 3 warnings in 14.51s ========================

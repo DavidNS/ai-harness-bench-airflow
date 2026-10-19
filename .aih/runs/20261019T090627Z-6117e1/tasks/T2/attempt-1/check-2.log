@@ -1,0 +1,226 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 510 items / 494 deselected / 16 selected
+
+airflow-core/tests/unit/models/test_dagrun.py::TestDagRun::test_draining_dag_runs_are_still_examined PASSED [  6%]
+airflow-core/tests/unit/models/test_dag.py::TestDag::test_draining_dag_is_paused_and_not_draining_after_limit PASSED [ 12%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_dags_needing_dagruns_skips_draining PASSED [ 18%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_scheduling_state_derived_from_flags[False-False-active] PASSED [ 25%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_scheduling_state_derived_from_flags[False-True-draining] PASSED [ 31%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_scheduling_state_derived_from_flags[True-False-paused] PASSED [ 37%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_set_scheduling_state[active-False-False] PASSED [ 43%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_set_scheduling_state[draining-False-True0] PASSED [ 50%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_set_scheduling_state[paused-True-False] PASSED [ 56%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_set_scheduling_state[draining-False-True1] PASSED [ 62%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_is_draining_defaults_to_false PASSED [ 68%]
+airflow-core/tests/unit/models/test_dag.py::TestDagModel::test_db_rejects_paused_and_draining PASSED [ 75%]
+airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[asset] FAILED [ 81%]
+airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[alias] FAILED [ 87%]
+airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[name_ref] FAILED [ 93%]
+airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[uri_ref] FAILED [100%]
+
+=================================== FAILURES ===================================
+____ TestAssetManager.test_register_asset_change_skips_draining_dag[asset] _____
+airflow-core/tests/unit/assets/test_manager.py:228: in test_register_asset_change_skips_draining_dag
+    AssetManager().register_asset_change(
+airflow-core/src/airflow/assets/manager.py:333: in register_asset_change
+    cls._add_asset_alias_association(
+airflow-core/src/airflow/assets/manager.py:172: in _add_asset_alias_association
+    for m in session.scalars(select(AssetAliasModel).where(AssetAliasModel.name.in_(alias_names)))
+                                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:943: in in_
+    return self.operate(in_op, other)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/attributes.py:453: in operate
+    return op(self.comparator, *other, **kwargs)  # type: ignore[no-any-return]  # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:2146: in in_op
+    return a.in_(b)
+           ^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:943: in in_
+    return self.operate(in_op, other)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/properties.py:479: in operate
+    return op(self.__clause_element__(), *other, **kwargs)  # type: ignore[no-any-return]  # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:2146: in in_op
+    return a.in_(b)
+           ^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:943: in in_
+    return self.operate(in_op, other)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:1534: in operate
+    return op(self.comparator, *other, **kwargs)  # type: ignore[no-any-return]  # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:2146: in in_op
+    return a.in_(b)
+           ^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/operators.py:943: in in_
+    return self.operate(in_op, other)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/type_api.py:210: in operate
+    return op_fn(self.expr, op, *other, **addtl_kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/default_comparator.py:218: in _in_impl
+    seq_or_selectable = coercions.expect(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/coercions.py:396: in expect
+    resolved = impl._literal_coercion(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/coercions.py:879: in _literal_coercion
+    self._raise_for_expected(element, **kw)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/coercions.py:519: in _raise_for_expected
+    raise exc.ArgumentError(msg, code=code) from err
+E   sqlalchemy.exc.ArgumentError: IN expression list, SELECT construct, or bound parameter object expected, got None.
+----------------------------- Captured stdout call -----------------------------
+2026-10-19T09:22:19.034304Z [warning  ] Emitting event for inactive AssetModel Asset(name='test_asset_uri', uri='test://asset1/', group='asset', extra={}, watchers=[], access_control=AssetAccessControl(producer_teams=[], consumer_teams=None, allow_global=True)) [airflow.assets.manager.AssetManager]
+____ TestAssetManager.test_register_asset_change_skips_draining_dag[alias] _____
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlite3.IntegrityError: UNIQUE constraint failed: dag.dag_id
+
+The above exception was the direct cause of the following exception:
+airflow-core/tests/unit/assets/test_manager.py:226: in test_register_asset_change_skips_draining_dag
+    session.flush()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: dag.dag_id
+E   [SQL: INSERT INTO dag (dag_id, is_paused, is_draining, is_stale, exceeds_max_non_backfill, last_parsed_time, last_parse_duration, last_expired, fileloc, relative_fileloc, bundle_name, bundle_version, owners, dag_display_name, description, timetable_type, timetable_summary, timetable_description, partition_mapper_info, max_active_tasks, max_active_runs, max_consecutive_failed_dag_runs, has_task_concurrency_limits, has_import_errors, fail_fast, next_dagrun, next_dagrun_data_interval_start, next_dagrun_data_interval_end, next_dagrun_partition_key, next_dagrun_partition_date, next_dagrun_create_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING timetable_partitioned, timetable_periodic]
+E   [parameters: ('active_dag', 0, 0, 0, 0, None, None, None, None, None, 'testing', None, None, None, None, '', None, None, '[]', 16, 16, 0, 1, 0, 0, None, None, None, None, None, None)]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
+___ TestAssetManager.test_register_asset_change_skips_draining_dag[name_ref] ___
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlite3.IntegrityError: UNIQUE constraint failed: dag.dag_id
+
+The above exception was the direct cause of the following exception:
+airflow-core/tests/unit/assets/test_manager.py:226: in test_register_asset_change_skips_draining_dag
+    session.flush()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: dag.dag_id
+E   [SQL: INSERT INTO dag (dag_id, is_paused, is_draining, is_stale, exceeds_max_non_backfill, last_parsed_time, last_parse_duration, last_expired, fileloc, relative_fileloc, bundle_name, bundle_version, owners, dag_display_name, description, timetable_type, timetable_summary, timetable_description, partition_mapper_info, max_active_tasks, max_active_runs, max_consecutive_failed_dag_runs, has_task_concurrency_limits, has_import_errors, fail_fast, next_dagrun, next_dagrun_data_interval_start, next_dagrun_data_interval_end, next_dagrun_partition_key, next_dagrun_partition_date, next_dagrun_create_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING timetable_partitioned, timetable_periodic]
+E   [parameters: ('active_dag', 0, 0, 0, 0, None, None, None, None, None, 'testing', None, None, None, None, '', None, None, '[]', 16, 16, 0, 1, 0, 0, None, None, None, None, None, None)]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
+___ TestAssetManager.test_register_asset_change_skips_draining_dag[uri_ref] ____
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlite3.IntegrityError: UNIQUE constraint failed: dag.dag_id
+
+The above exception was the direct cause of the following exception:
+airflow-core/tests/unit/assets/test_manager.py:226: in test_register_asset_change_skips_draining_dag
+    session.flush()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4353: in flush
+    self._flush(objects)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4488: in _flush
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/util/langhelpers.py:122: in __exit__
+    raise exc_value.with_traceback(exc_tb)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/session.py:4449: in _flush
+    flush_context.execute()
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:465: in execute
+    rec.execute(self)
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/unitofwork.py:641: in execute
+    util.preloaded.orm_persistence.save_obj(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:94: in save_obj
+    _emit_insert_statements(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/orm/persistence.py:1234: in _emit_insert_statements
+    result = connection.execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1421: in execute
+    return meth(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/sql/elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1848: in _execute_context
+    return self._exec_single_context(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+/work/venv-arm/lib/python3.12/site-packages/sqlalchemy/engine/default.py:952: in do_execute
+    cursor.execute(statement, parameters)
+E   sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: dag.dag_id
+E   [SQL: INSERT INTO dag (dag_id, is_paused, is_draining, is_stale, exceeds_max_non_backfill, last_parsed_time, last_parse_duration, last_expired, fileloc, relative_fileloc, bundle_name, bundle_version, owners, dag_display_name, description, timetable_type, timetable_summary, timetable_description, partition_mapper_info, max_active_tasks, max_active_runs, max_consecutive_failed_dag_runs, has_task_concurrency_limits, has_import_errors, fail_fast, next_dagrun, next_dagrun_data_interval_start, next_dagrun_data_interval_end, next_dagrun_partition_key, next_dagrun_partition_date, next_dagrun_create_after) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING timetable_partitioned, timetable_periodic]
+E   [parameters: ('active_dag', 0, 0, 0, 0, None, None, None, None, None, 'testing', None, None, None, None, '', None, None, '[]', 16, 16, 0, 1, 0, 0, None, None, None, None, None, None)]
+E   (Background on this error at: https://sqlalche.me/e/20/gkpj)
+=========================== short test summary info ============================
+FAILED airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[asset]
+FAILED airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[alias]
+FAILED airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[name_ref]
+FAILED airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag[uri_ref]
+=========== 4 failed, 12 passed, 494 deselected, 1 warning in 14.77s ===========

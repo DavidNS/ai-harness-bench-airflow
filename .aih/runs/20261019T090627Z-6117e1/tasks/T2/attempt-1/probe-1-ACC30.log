@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 17 items
+
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_one_field[body0-expected0] PASSED [  5%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_one_field[body1-expected1] PASSED [ 11%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_one_field[body2-expected2] PASSED [ 17%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_one_field[body3-expected3] PASSED [ 23%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_one_field[body4-expected4] PASSED [ 29%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body0] PASSED [ 35%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body1] PASSED [ 41%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body2] PASSED [ 47%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body3] PASSED [ 52%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body4] PASSED [ 58%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags/probe_api_a-body5] PASSED [ 64%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body0] PASSED [ 70%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body1] PASSED [ 76%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body2] PASSED [ 82%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body3] PASSED [ 88%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body4] PASSED [ 94%]
+airflow-core/tests/unit/api_fastapi/core_api/routes/public/aih_probe_drain_dags.py::test_probe_patch_needs_exactly_one_field[/dags-body5] PASSED [100%]
+==================== Warning summary. Total: 32, Unique: 2 =====================
+other: total 32, unique 2
+  runtest: total 32, unique 2
+Warnings saved into /work/tree/devel-common/warnings.txt file.
+
+======================= 17 passed, 3 warnings in 13.30s ========================

@@ -1,0 +1,18 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 423 items / 416 deselected / 7 selected
+
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_pauses_idle_dags PASSED [ 14%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_waits_for_unfinished_run[queued] PASSED [ 28%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_waits_for_unfinished_run[running] PASSED [ 42%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_waits_for_uninitialised_backfill PASSED [ 57%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_ignores_completed_backfill PASSED [ 71%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_finalize_draining_dags_orders_by_dag_id_with_limit_and_row_locks PASSED [ 85%]
+airflow-core/tests/unit/jobs/test_scheduler_job.py::test_scheduler_loop_registers_finalize_draining_dags_every_5_seconds PASSED [100%]
+
+================ 7 passed, 416 deselected, 1 warning in 13.02s =================

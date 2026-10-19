@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261019T090627Z-6117e1
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 11 items
+
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_partitioned_event_ignored_while_draining PASSED [  9%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_tis_queued_by_scheduling_state[draining-True] PASSED [ 18%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_tis_queued_by_scheduling_state[active-True] PASSED [ 27%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_tis_queued_by_scheduling_state[paused-False] PASSED [ 36%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_manual_run_can_be_created_for_draining_dag PASSED [ 45%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_finalize_pauses_idle_and_logs PASSED [ 54%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_finalize_keeps_dags_with_unfinished_runs[queued] PASSED [ 63%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_finalize_keeps_dags_with_unfinished_runs[running] PASSED [ 72%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_finalize_waits_for_backfill_without_runs PASSED [ 81%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_finalize_orders_by_dag_id_and_respects_limit PASSED [ 90%]
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_loop_registers_finalize_every_5_seconds FAILED [100%]
+
+=================================== FAILURES ===================================
+______________ test_probe_loop_registers_finalize_every_5_seconds ______________
+airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py:244: in test_probe_loop_registers_finalize_every_5_seconds
+    if call.args[1] == runner._finalize_draining_dags
+       ^^^^^^^^^^^^
+E   IndexError: tuple index out of range
+----------------------------- Captured stdout call -----------------------------
+2026-10-19T10:27:56.152252Z [info     ] Exiting scheduler loop as requested number of runs (1) has been reached (1 idle, 1 total) [airflow.jobs.scheduler_job_runner.SchedulerJobRunner]
+=========================== short test summary info ============================
+FAILED airflow-core/tests/unit/jobs/aih_probe_drain_scheduler.py::test_probe_loop_registers_finalize_every_5_seconds
+=================== 1 failed, 10 passed, 1 warning in 20.77s ===================
