@@ -31,15 +31,17 @@ from pydantic import (
     computed_field,
     field_serializer,
     field_validator,
+    model_validator,
 )
 
 from airflow._shared.module_loading import qualname
-from airflow.api_fastapi.core_api.base import BaseModel, StrictBaseModel, make_partial_model
+from airflow.api_fastapi.core_api.base import BaseModel, StrictBaseModel
 from airflow.api_fastapi.core_api.datamodels.common import MaybeAssetExpression
 from airflow.api_fastapi.core_api.datamodels.dag_tags import DagTagResponse
 from airflow.api_fastapi.core_api.datamodels.dag_versions import DagVersionResponse
 from airflow.configuration import conf
 from airflow.models.dag_version import DagVersion
+from airflow.utils.state import DagSchedulingState
 from airflow.utils.types import DagRunType
 
 if TYPE_CHECKING:
@@ -84,6 +86,7 @@ class DAGResponse(BaseModel):
     dag_id: str
     dag_display_name: str
     is_paused: bool
+    scheduling_state: DagSchedulingState = DagSchedulingState.ACTIVE
     is_stale: bool
     last_parsed_time: datetime | None
     last_parse_duration: float | None
@@ -160,12 +163,22 @@ class DAGResponse(BaseModel):
 
 
 class DAGPatchBody(StrictBaseModel):
-    """Dag Serializer for updatable bodies."""
+    """Dag Serializer for updatable bodies; exactly one of the two fields must be set."""
 
-    is_paused: bool
+    is_paused: bool | None = None
+    scheduling_state: DagSchedulingState | None = None
 
+    @model_validator(mode="after")
+    def validate_exactly_one_field(self) -> DAGPatchBody:
+        if (self.is_paused is None) == (self.scheduling_state is None):
+            raise ValueError("Exactly one of `is_paused` or `scheduling_state` must be provided")
+        return self
 
-DAGPatchBodyPartial = make_partial_model(DAGPatchBody)
+    def get_target_scheduling_state(self) -> DagSchedulingState:
+        """Return the scheduling state requested by whichever field the client sent."""
+        if self.scheduling_state is not None:
+            return self.scheduling_state
+        return DagSchedulingState.PAUSED if self.is_paused else DagSchedulingState.ACTIVE
 
 
 class DAGCollectionResponse(BaseModel):

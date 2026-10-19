@@ -51,6 +51,7 @@ from airflow.api_fastapi.common.parameters import (
     QueryOwnersFilter,
     QueryPausedFilter,
     QueryPendingActionsFilter,
+    QuerySchedulingStateFilter,
     QueryTagsFilter,
     QueryTeamsFilter,
     QueryTimetableTypePrefixPatternSearch,
@@ -113,6 +114,7 @@ def get_dags(
     dag_display_name_prefix_pattern: QueryDagDisplayNamePrefixPatternSearch,
     exclude_stale: QueryExcludeStaleFilter,
     paused: QueryPausedFilter,
+    scheduling_state: QuerySchedulingStateFilter,
     has_import_errors: QueryHasImportErrorsFilter,
     last_dag_run_state: QueryLastDagRunStateFilter,
     dag_run_state: QueryAnyDagRunStateFilter,
@@ -160,6 +162,7 @@ def get_dags(
         filters=[
             exclude_stale,
             paused,
+            scheduling_state,
             has_import_errors,
             dag_id_pattern,
             dag_id_prefix_pattern,
@@ -194,6 +197,19 @@ def get_dags(
         DagFavorite.user_id == user_id, DagFavorite.dag_id.in_([dag.dag_id for dag in dags])
     )
     favorite_dag_ids = set(session.scalars(favorites_select))
+
+    dag_ids_with_unfinished_runs: set[str] = set()
+    if dags:
+        dag_ids_with_unfinished_runs = set(
+            session.scalars(
+                select(DagRun.dag_id)
+                .where(
+                    DagRun.dag_id.in_([dag.dag_id for dag in dags]),
+                    DagRun.state.in_((DagRunState.QUEUED, DagRunState.RUNNING)),
+                )
+                .distinct()
+            )
+        )
 
     recent_dag_runs: list = []
     if dags:
@@ -269,6 +285,7 @@ def get_dags(
                 "latest_dag_runs": [],
                 "pending_actions": pending_actions_by_dag_id[dag.dag_id],
                 "is_favorite": dag.dag_id in favorite_dag_ids,
+                "has_unfinished_runs": dag.dag_id in dag_ids_with_unfinished_runs,
                 "team_name": team_names_by_dag_id.get(dag.dag_id),
             }
         )

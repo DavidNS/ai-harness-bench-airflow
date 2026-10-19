@@ -112,6 +112,22 @@ class DagRunState(str, Enum):
         return self.value
 
 
+class DagSchedulingState(str, Enum):
+    """
+    Scheduling state of a Dag.
+
+    ``DRAINING`` is transient: the scheduler stops creating new runs and moves the Dag
+    to ``PAUSED`` once its in-flight work has finished.
+    """
+
+    ACTIVE = "active"
+    DRAINING = "draining"
+    PAUSED = "paused"
+
+    def __str__(self) -> str:
+        return self.value
+
+
 class State:
     """Static class with task instance state constants and color methods to avoid hard-coding."""
 

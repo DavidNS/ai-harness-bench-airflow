@@ -84,7 +84,7 @@ from airflow.task.trigger_rule import TriggerRule
 from airflow.triggers.base import StartTriggerArgs
 from airflow.utils.session import create_session
 from airflow.utils.sqlalchemy import prohibit_commit
-from airflow.utils.state import DagRunState, State, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils import db
@@ -1100,6 +1100,26 @@ class TestDagRun:
 
         runs = fetch().all()
         assert runs == []
+
+    def test_draining_dag_runs_are_still_examined(self, dag_maker, session):
+        with dag_maker("draining_dag_runs_examined", session=session):
+            EmptyOperator(task_id="task")
+        running = dag_maker.create_dagrun(run_id="running", state=DagRunState.RUNNING, session=session)
+        queued = dag_maker.create_dagrun(
+            run_id="queued",
+            logical_date=DEFAULT_DATE + datetime.timedelta(days=1),
+            state=DagRunState.QUEUED,
+            session=session,
+        )
+        session.get(DagModel, "draining_dag_runs_examined").set_scheduling_state(
+            DagSchedulingState.DRAINING
+        )
+        session.commit()
+
+        assert DagRun.get_running_dag_runs_to_examine(session=session, eagerly_load_dag_tags=False).all() == [
+            running
+        ]
+        assert DagRun.get_queued_dag_runs_to_set_running(session).all() == [queued]
 
     @mock.patch("airflow._shared.observability.metrics.stats.timing")
     def test_no_scheduling_delay_for_nonscheduled_runs(self, stats_mock, session, testing_dag_bundle):

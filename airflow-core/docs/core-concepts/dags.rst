@@ -811,6 +811,34 @@ downstream tasks are put in to a state of "Scheduled". When the Dag is unpaused,
 begin running according to the Dag logic. Dags with no "scheduled" tasks will begin running according to
 their schedule.
 
+.. _concepts:dag-draining:
+
+Draining a Dag
+~~~~~~~~~~~~~~
+
+.. versionadded:: 3.4
+
+Pausing is abrupt: queued and downstream tasks of the runs in flight are stranded until the Dag is
+unpaused. To stop starting new runs while letting the current ones complete, for example before an upgrade
+or a maintenance window, set the Dag's scheduling state to ``draining``. A Dag has one of three scheduling
+states: ``active``, ``draining`` or ``paused``. ``draining`` is transient and always converges to ``paused``.
+
+While a Dag is draining:
+
+* the Scheduler creates no new runs for it: neither scheduled runs, nor runs triggered by asset events
+  (the asset events are still recorded);
+* the task instances of its queued and running runs continue to be scheduled and executed, unlike for a paused Dag;
+* explicit triggers (manual, operator-triggered, asset materialization and backfill) remain available, as
+  they are for a paused Dag, and extend the drain until the resulting work finishes.
+
+When the Dag has no queued or running run left, and no backfill that has been accepted but not yet initialized,
+the Scheduler pauses the Dag and records a ``drain_completed`` entry in the audit log.
+
+Use the ``scheduling_state`` field of ``PATCH /dags/{dag_id}`` (or ``PATCH /dags`` for several Dags) to start
+a drain. Clients that only know ``is_paused`` keep working: ``is_paused=true`` pauses the Dag and
+``is_paused=false`` activates it, and both cancel a drain in progress. ``airflow dags pause`` and
+``airflow dags unpause`` do the same.
+
 Dags can be deactivated (do not confuse it with ``Active`` tag in the UI) by removing them from the
 ``DAGS_FOLDER``. When scheduler parses the ``DAGS_FOLDER`` and misses the Dag that it had seen
 before and stored in the database it will set is as deactivated. The metadata and history of the
@@ -847,6 +875,8 @@ if it fails for ``N`` number of times consecutively.
 we can also provide and override these configuration from Dag argument:
 
 - ``max_consecutive_failed_dag_runs``: Overrides :ref:`config:core__max_consecutive_failed_dag_runs_per_dag`.
+
+Auto-pausing also applies to a draining Dag: it is paused and no longer draining.
 
 Deadline Alerts
 ---------------

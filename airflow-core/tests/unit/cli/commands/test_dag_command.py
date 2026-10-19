@@ -52,7 +52,7 @@ from airflow.timetables.base import Timetable
 from airflow.triggers.base import TriggerEvent
 from airflow.utils.cli import get_db_dag
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 from tests_common.test_utils.config import conf_vars
@@ -513,7 +513,7 @@ class TestCliDags:
         log_output = caplog.text
 
         assert err_ctx.value.code == 1
-        assert str(path_to_parse) in log_output
+        assert f"{path_to_parse.parent.name}/{path_to_parse.name}" in log_output
         assert "[0 100 * * *] is not acceptable, out of range" in log_output
 
     def test_cli_list_dag_runs(self):
@@ -563,6 +563,34 @@ class TestCliDags:
         assert DagModel.get_dagmodel("example_bash_operator").is_paused
         dag_command.dag_unpause(args)
         assert not DagModel.get_dagmodel("example_bash_operator").is_paused
+
+    @pytest.mark.parametrize(
+        ("command", "expected_state"),
+        [
+            pytest.param(dag_command.dag_pause, DagSchedulingState.PAUSED, id="pause"),
+            pytest.param(dag_command.dag_unpause, DagSchedulingState.ACTIVE, id="unpause"),
+        ],
+    )
+    def test_pause_unpause_change_draining_dag(self, command, expected_state, session, capsys):
+        session.get(DagModel, "example_bash_operator").set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        verb = command.__name__.removeprefix("dag_")
+        command(self.parser.parse_args(["dags", verb, "example_bash_operator"]))
+
+        assert "No " not in capsys.readouterr().out
+        session.expire_all()
+        assert session.get(DagModel, "example_bash_operator").scheduling_state == expected_state
+
+    def test_cli_get_dag_details_includes_scheduling_state(self, session, stdout_capture):
+        session.get(DagModel, "example_complex").set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+        args = self.parser.parse_args(["dags", "details", "example_complex", "--output", "json"])
+
+        with stdout_capture as temp_stdout:
+            dag_command.dag_details(args)
+
+        assert json.loads(temp_stdout.getvalue())[0]["scheduling_state"] == "draining"
 
     def test_pause_unpause_from_dag_cli(self):
         """``DAG.cli()`` passes the Dag positionally and its parser drops ``--dag-id``."""

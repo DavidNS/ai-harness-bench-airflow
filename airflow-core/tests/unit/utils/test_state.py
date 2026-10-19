@@ -24,7 +24,14 @@ from sqlalchemy import select
 from airflow.models.dagrun import DagRun
 from airflow.sdk import DAG
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, IntermediateTIState, State, TaskInstanceState, TerminalTIState
+from airflow.utils.state import (
+    DagRunState,
+    DagSchedulingState,
+    IntermediateTIState,
+    State,
+    TaskInstanceState,
+    TerminalTIState,
+)
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils.dag import sync_dag_to_db
@@ -77,6 +84,15 @@ def test_dagrun_state_enum_escape(testing_dag_bundle):
         assert rows[0].state == "queued"
 
         session.rollback()
+
+
+def test_dag_scheduling_state_members():
+    assert {member.name: member.value for member in DagSchedulingState} == {
+        "ACTIVE": "active",
+        "DRAINING": "draining",
+        "PAUSED": "paused",
+    }
+    assert str(DagSchedulingState.DRAINING) == "draining"
 
 
 class TestTaskInstanceStates:

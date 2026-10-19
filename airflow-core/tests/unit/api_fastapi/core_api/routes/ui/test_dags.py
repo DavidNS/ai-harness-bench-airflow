@@ -34,7 +34,7 @@ from airflow.models.dag_favorite import DagFavorite
 from airflow.models.hitl import HITLDetail
 from airflow.sdk.timezone import utcnow
 from airflow.utils.session import NEW_SESSION, provide_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils.asserts import count_queries
@@ -192,6 +192,44 @@ class TestGetDagRuns(TestPublicDagEndpoint):
         )
         assert response.status_code == 200
         assert [dag["dag_id"] for dag in response.json()["dags"]] == [DAG1_ID]
+
+    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+    @pytest.mark.parametrize(
+        ("query_params", "expected_ids"),
+        [
+            ({"scheduling_state": "active"}, [DAG1_ID]),
+            ({"scheduling_state": "draining"}, [DAG2_ID]),
+            ({"scheduling_state": "paused", "exclude_stale": False}, [DAG3_ID]),
+            ({"paused": False}, [DAG1_ID, DAG2_ID]),
+            ({"paused": True, "exclude_stale": False}, [DAG3_ID]),
+        ],
+    )
+    def test_scheduling_state_filter(self, test_client, session, query_params, expected_ids):
+        session.get(DagModel, DAG2_ID).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        response = test_client.get("/dags", params=query_params)
+
+        assert response.status_code == 200
+        assert [dag["dag_id"] for dag in response.json()["dags"]] == expected_ids
+
+    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+    @pytest.mark.parametrize("state", ["queued", "running"])
+    def test_has_unfinished_runs_ignores_dag_runs_limit(self, test_client, session, state):
+        # The unfinished run is the oldest one, outside the single latest run shown for DAG1.
+        older_run = session.scalar(
+            select(DagRun).where(DagRun.dag_id == DAG1_ID, DagRun.run_id == "run_id_1")
+        )
+        older_run.state = DagRunState(state)
+        session.commit()
+
+        response = test_client.get("/dags", params={"dag_runs_limit": 1})
+
+        assert response.status_code == 200
+        dags = {dag["dag_id"]: dag for dag in response.json()["dags"]}
+        assert len(dags[DAG1_ID]["latest_dag_runs"]) == 1
+        assert dags[DAG1_ID]["has_unfinished_runs"] is True
+        assert dags[DAG2_ID]["has_unfinished_runs"] is False
 
     @pytest.fixture
     def setup_hitl_data(self, create_task_instance: TaskInstance, session: Session):

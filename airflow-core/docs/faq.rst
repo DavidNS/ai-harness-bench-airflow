@@ -119,6 +119,14 @@ How do I trigger tasks based on another task's failure?
 
 You can achieve this with :ref:`concepts:trigger-rules`.
 
+How do I stop new Dag runs while letting the current ones finish?
+-----------------------------------------------------------------
+
+Set the Dag's scheduling state to ``draining`` with the ``scheduling_state`` field of ``PATCH /dags/{dag_id}``
+instead of pausing it or setting its schedule to ``None``. The Scheduler creates no new runs for a draining Dag,
+keeps scheduling the tasks of its queued and running runs, and pauses the Dag by itself once they have finished.
+See :ref:`concepts:dag-draining`.
+
 .. _faq:how-to-control-dag-file-parsing-timeout:
 
 How to control Dag file parsing timeout for different Dag files?

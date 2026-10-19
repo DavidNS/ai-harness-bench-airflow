@@ -19,12 +19,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from airflow._shared.module_loading import qualname
 from airflow.api_fastapi.core_api.datamodels.dags import (
     DAGDetailsResponse,
+    DAGPatchBody,
     DAGResponse,
 )
+from airflow.utils.state import DagSchedulingState
 from airflow.utils.types import DagRunType
 
 
@@ -133,6 +136,48 @@ class TestGetDefaultArgsValidator:
         value = Opaque()
         result = self._call_validator({"connection": value})
         assert result["connection"] is value
+
+
+class TestSchedulingState:
+    def test_response_defaults_to_active(self):
+        assert _make_dag_response().scheduling_state == DagSchedulingState.ACTIVE
+
+    def test_response_carries_scheduling_state(self):
+        dag = _make_dag_response(scheduling_state="draining")
+        assert dag.model_dump()["scheduling_state"] == DagSchedulingState.DRAINING
+
+
+class TestDAGPatchBody:
+    @pytest.mark.parametrize(
+        ("body", "expected_state"),
+        [
+            pytest.param({"is_paused": True}, DagSchedulingState.PAUSED, id="is_paused-true"),
+            pytest.param({"is_paused": False}, DagSchedulingState.ACTIVE, id="is_paused-false"),
+            pytest.param({"scheduling_state": "draining"}, DagSchedulingState.DRAINING, id="draining"),
+            pytest.param(
+                {"is_paused": None, "scheduling_state": "paused"}, DagSchedulingState.PAUSED, id="null-is_paused"
+            ),
+            pytest.param(
+                {"is_paused": True, "scheduling_state": None}, DagSchedulingState.PAUSED, id="null-state"
+            ),
+        ],
+    )
+    def test_exactly_one_field_is_accepted(self, body, expected_state):
+        assert DAGPatchBody.model_validate(body).get_target_scheduling_state() == expected_state
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            pytest.param({"is_paused": True, "scheduling_state": "paused"}, id="both"),
+            pytest.param({}, id="neither"),
+            pytest.param({"is_paused": None}, id="only-null-is_paused"),
+            pytest.param({"scheduling_state": None}, id="only-null-state"),
+            pytest.param({"is_paused": None, "scheduling_state": None}, id="both-null"),
+        ],
+    )
+    def test_other_combinations_are_rejected(self, body):
+        with pytest.raises(ValidationError):
+            DAGPatchBody.model_validate(body)
 
 
 class TestIsBackfillable:

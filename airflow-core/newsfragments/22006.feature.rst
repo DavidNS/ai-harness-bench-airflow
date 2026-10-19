@@ -1,0 +1,1 @@
+Add a "draining" scheduling state for Dags that stops new scheduled runs while the runs already in flight finish, after which the Dag is paused automatically. Set it with ``scheduling_state`` on ``PATCH /dags``; ``is_paused`` keeps working as before.
