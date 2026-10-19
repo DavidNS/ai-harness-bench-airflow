@@ -31,7 +31,7 @@ from airflow.models.dagbundle import DagBundleModel
 from airflow.models.dagrun import DagRun
 from airflow.models.team import Team
 from airflow.providers.standard.operators.empty import EmptyOperator
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils.asserts import assert_queries_count, capture_orm_selects, count_queries
@@ -962,6 +962,101 @@ class TestPatchDag(TestDagEndpoint):
             session, dag_id=DAG1_ID, event="patch_dag", logical_date=None, expected_extra=expected_extra
         )
 
+    @pytest.mark.parametrize(
+        ("initial_state", "body", "expected_state", "expected_is_paused"),
+        [
+            (DagSchedulingState.ACTIVE, {"scheduling_state": "draining"}, "draining", False),
+            (DagSchedulingState.ACTIVE, {"scheduling_state": "paused"}, "paused", True),
+            (DagSchedulingState.PAUSED, {"scheduling_state": "active"}, "active", False),
+            (DagSchedulingState.DRAINING, {"scheduling_state": "paused"}, "paused", True),
+            (DagSchedulingState.DRAINING, {"scheduling_state": "active"}, "active", False),
+            (DagSchedulingState.DRAINING, {"is_paused": True}, "paused", True),
+            (DagSchedulingState.DRAINING, {"is_paused": False}, "active", False),
+            (
+                DagSchedulingState.PAUSED,
+                {"scheduling_state": "draining", "is_paused": None},
+                "draining",
+                False,
+            ),
+            (DagSchedulingState.ACTIVE, {"scheduling_state": None, "is_paused": True}, "paused", True),
+        ],
+    )
+    def test_patch_dag_scheduling_state(
+        self, test_client, session, initial_state, body, expected_state, expected_is_paused
+    ):
+        session.get(DagModel, DAG1_ID).set_scheduling_state(initial_state)
+        session.commit()
+
+        response = test_client.patch(f"/dags/{DAG1_ID}", json=body)
+
+        assert response.status_code == 200
+        assert response.json()["scheduling_state"] == expected_state
+        assert response.json()["is_paused"] is expected_is_paused
+        session.expire_all()
+        dag_model = session.get(DagModel, DAG1_ID)
+        assert dag_model.scheduling_state == expected_state
+        assert dag_model.is_draining is (expected_state == "draining")
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"is_paused": None},
+            {"scheduling_state": None},
+            {"is_paused": None, "scheduling_state": None},
+            {"is_paused": True, "scheduling_state": "paused"},
+            {"is_paused": False, "scheduling_state": "active"},
+            {"scheduling_state": "unknown"},
+        ],
+    )
+    def test_patch_dag_requires_exactly_one_field(self, test_client, body):
+        response = test_client.patch(f"/dags/{DAG1_ID}", json=body)
+
+        assert response.status_code == 422
+
+    @pytest.mark.parametrize(
+        ("update_mask", "body", "expected_status_code", "expected_state"),
+        [
+            (["scheduling_state"], {"scheduling_state": "draining"}, 200, "draining"),
+            (["scheduling_state"], {"scheduling_state": "draining", "is_paused": None}, 200, "draining"),
+            (["is_paused"], {"is_paused": True, "scheduling_state": None}, 200, "paused"),
+            (["is_paused"], {"scheduling_state": "draining"}, 422, "active"),
+            (["scheduling_state"], {"is_paused": True}, 422, "active"),
+            (["is_paused", "scheduling_state"], {"scheduling_state": "draining"}, 400, "active"),
+            (["field_1"], {"scheduling_state": "draining"}, 400, "active"),
+        ],
+    )
+    def test_patch_dag_update_mask_with_scheduling_state(
+        self, test_client, session, update_mask, body, expected_status_code, expected_state
+    ):
+        response = test_client.patch(f"/dags/{DAG1_ID}", json=body, params={"update_mask": update_mask})
+
+        assert response.status_code == expected_status_code
+        session.expire_all()
+        assert session.get(DagModel, DAG1_ID).scheduling_state == expected_state
+
+    def test_patch_dag_scheduling_state_audit_log_payload(self, test_client, session):
+        response = test_client.patch(f"/dags/{DAG1_ID}", json={"scheduling_state": "draining"})
+
+        assert response.status_code == 200
+        check_last_log(
+            session,
+            dag_id=DAG1_ID,
+            event="patch_dag",
+            logical_date=None,
+            expected_extra={"scheduling_state": "draining", "method": "PATCH"},
+        )
+
+    def test_get_dag_returns_scheduling_state(self, test_client, session):
+        session.get(DagModel, DAG1_ID).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        response = test_client.get(f"/dags/{DAG1_ID}")
+
+        assert response.status_code == 200
+        assert response.json()["scheduling_state"] == "draining"
+        assert response.json()["is_paused"] is False
+
 
 class TestPatchDags(TestDagEndpoint):
     """Unit tests for Patch DAGs."""
@@ -1073,6 +1168,53 @@ class TestPatchDags(TestDagEndpoint):
         assert {dag["dag_id"] for dag in resp_body["dags"]} == set(expected_ids)
         paused_dag_ids = {dag["dag_id"] for dag in resp_body["dags"] if dag["is_paused"]}
         assert paused_dag_ids == set(expected_paused_ids)
+
+    @pytest.mark.parametrize(
+        ("body", "expected_state"),
+        [
+            ({"scheduling_state": "draining"}, DagSchedulingState.DRAINING),
+            ({"scheduling_state": "paused"}, DagSchedulingState.PAUSED),
+            ({"scheduling_state": "active"}, DagSchedulingState.ACTIVE),
+            ({"scheduling_state": "draining", "is_paused": None}, DagSchedulingState.DRAINING),
+            ({"is_paused": True}, DagSchedulingState.PAUSED),
+            ({"is_paused": False}, DagSchedulingState.ACTIVE),
+        ],
+    )
+    def test_patch_dags_scheduling_state(self, test_client, session, body, expected_state):
+        session.get(DagModel, DAG1_ID).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.get(DagModel, DAG2_ID).set_scheduling_state(DagSchedulingState.PAUSED)
+        session.commit()
+
+        response = test_client.patch("/dags", json=body, params={"dag_id_pattern": "~"})
+
+        assert response.status_code == 200
+        assert {dag["dag_id"]: dag["scheduling_state"] for dag in response.json()["dags"]} == {
+            DAG1_ID: expected_state,
+            DAG2_ID: expected_state,
+        }
+        session.expire_all()
+        for dag_id in (DAG1_ID, DAG2_ID):
+            dag_model = session.get(DagModel, dag_id)
+            assert dag_model.scheduling_state == expected_state
+            assert dag_model.is_paused is (expected_state == DagSchedulingState.PAUSED)
+            assert dag_model.is_draining is (expected_state == DagSchedulingState.DRAINING)
+
+    @pytest.mark.parametrize(
+        ("params", "body", "expected_status_code"),
+        [
+            ({}, {}, 422),
+            ({}, {"is_paused": None, "scheduling_state": None}, 422),
+            ({}, {"is_paused": True, "scheduling_state": "paused"}, 422),
+            ({"update_mask": ["scheduling_state"]}, {"scheduling_state": "draining"}, 200),
+            ({"update_mask": ["is_paused"]}, {"scheduling_state": "draining"}, 422),
+            ({"update_mask": ["scheduling_state"]}, {"is_paused": True}, 422),
+            ({"update_mask": ["is_paused", "scheduling_state"]}, {"is_paused": True}, 400),
+        ],
+    )
+    def test_patch_dags_validates_body_and_update_mask(self, test_client, params, body, expected_status_code):
+        response = test_client.patch("/dags", json=body, params={"dag_id_pattern": "~", **params})
+
+        assert response.status_code == expected_status_code
 
     def test_patch_dags_updates_all_beyond_limit(self, test_client, session):
         response = test_client.patch(
@@ -1269,6 +1411,7 @@ class TestDagDetails(TestDagEndpoint):
             "is_favorite": False,
             "is_paused": False,
             "is_paused_upon_creation": None,
+            "scheduling_state": "active",
             "is_stale": False,
             "latest_dag_version": {
                 "bundle_name": "dag_maker",
@@ -1493,6 +1636,7 @@ class TestGetDag(TestDagEndpoint):
             "has_task_concurrency_limits": True,
             "is_backfillable": False,
             "is_paused": False,
+            "scheduling_state": "active",
             "is_stale": False,
             "last_expired": None,
             "last_parse_duration": last_parse_duration,

@@ -1,0 +1,1 @@
+Dags can now be put in a ``draining`` scheduling state: the Scheduler stops creating new scheduled and asset-triggered runs for the Dag, lets the runs already in flight finish, then pauses the Dag by itself. The state is exposed as ``scheduling_state`` in the REST API (``PATCH /dags`` accepts either ``is_paused`` or ``scheduling_state``) and ``is_paused`` keeps its meaning.

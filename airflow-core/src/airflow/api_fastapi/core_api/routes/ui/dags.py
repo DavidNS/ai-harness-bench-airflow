@@ -41,6 +41,7 @@ from airflow.api_fastapi.common.parameters import (
     QueryDagDisplayNamePrefixPatternSearch,
     QueryDagIdPatternSearch,
     QueryDagIdPrefixPatternSearch,
+    QueryDagSchedulingStateFilter,
     QueryExcludeStaleFilter,
     QueryFavoriteFilter,
     QueryHasAssetScheduleFilter,
@@ -78,7 +79,7 @@ from airflow.models import DagModel, DagRun
 from airflow.models.dag_favorite import DagFavorite
 from airflow.models.hitl import HITLDetail
 from airflow.models.taskinstance import TaskInstance
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, State, TaskInstanceState
 
 dags_router = AirflowRouter(prefix="/dags", tags=["DAG"])
 
@@ -113,6 +114,7 @@ def get_dags(
     dag_display_name_prefix_pattern: QueryDagDisplayNamePrefixPatternSearch,
     exclude_stale: QueryExcludeStaleFilter,
     paused: QueryPausedFilter,
+    scheduling_state: QueryDagSchedulingStateFilter,
     has_import_errors: QueryHasImportErrorsFilter,
     last_dag_run_state: QueryLastDagRunStateFilter,
     dag_run_state: QueryAnyDagRunStateFilter,
@@ -160,6 +162,7 @@ def get_dags(
         filters=[
             exclude_stale,
             paused,
+            scheduling_state,
             has_import_errors,
             dag_id_pattern,
             dag_id_prefix_pattern,
@@ -219,6 +222,19 @@ def get_dags(
             session.execute(select(recent_runs_union).order_by(recent_runs_union.c.run_after.desc()))
         )
 
+    unfinished_run_dag_ids: set[str] = set()
+    if dags:
+        unfinished_run_dag_ids = set(
+            session.scalars(
+                select(DagRun.dag_id)
+                .where(
+                    DagRun.dag_id.in_([dag.dag_id for dag in dags]),
+                    DagRun.state.in_(State.unfinished_dr_states),
+                )
+                .distinct()
+            )
+        )
+
     # Fetch pending HITL actions for each Dag if we are not certain whether some of the Dag might contain HITL actions
     pending_actions_by_dag_id: dict[str, list[HITLDetail]] = {dag.dag_id: [] for dag in dags}
     if has_pending_actions.value:
@@ -269,6 +285,7 @@ def get_dags(
                 "latest_dag_runs": [],
                 "pending_actions": pending_actions_by_dag_id[dag.dag_id],
                 "is_favorite": dag.dag_id in favorite_dag_ids,
+                "has_unfinished_runs": dag.dag_id in unfinished_run_dag_ids,
                 "team_name": team_names_by_dag_id.get(dag.dag_id),
             }
         )

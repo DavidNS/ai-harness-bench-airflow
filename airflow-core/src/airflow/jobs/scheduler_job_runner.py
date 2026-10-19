@@ -131,7 +131,7 @@ from airflow.utils.sqlalchemy import (
     random_db_uuid,
     with_row_locks,
 )
-from airflow.utils.state import CallbackState, DagRunState, State, TaskInstanceState
+from airflow.utils.state import CallbackState, DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 if TYPE_CHECKING:
@@ -1831,6 +1831,8 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
             self._mark_backfills_complete,
         )
 
+        timers.call_regular_interval(5.0, self._finalize_draining_dags)
+
         if self._is_metrics_enabled() or self._is_tracing_enabled():
             timers.call_regular_interval(
                 conf.getfloat("scheduler", "pool_metrics_interval", fallback=5.0),
@@ -2282,6 +2284,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                 .where(
                     AssetPartitionDagRun.created_dag_run_id.is_(None),
                     DagModel.is_stale.is_(False),
+                    DagModel.is_draining.is_(False),
                 )
                 .order_by(AssetPartitionDagRun.created_at, AssetPartitionDagRun.id)
                 .limit(self._max_partition_dag_runs_per_loop),
@@ -2519,6 +2522,42 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
         self.log.info("marking %s backfills as complete", len(backfills))
         for b in backfills:
             b.completed_at = now
+
+    @provide_session
+    def _finalize_draining_dags(self, *, session: Session = NEW_SESSION) -> None:
+        """Pause draining Dags that have no unfinished Dag runs and no backfill still being initialised."""
+        unfinished_run = exists(
+            select(DagRun.id).where(
+                DagRun.dag_id == DagModel.dag_id,
+                DagRun.state.in_(State.unfinished_dr_states),
+            )
+        )
+        uninitialised_backfill = exists(
+            select(Backfill.id).where(
+                Backfill.dag_id == DagModel.dag_id,
+                Backfill.completed_at.is_(None),
+                ~exists(select(BackfillDagRun.id).where(BackfillDagRun.backfill_id == Backfill.id)),
+            )
+        )
+        query = (
+            select(DagModel)
+            .where(DagModel.is_draining.is_(True), ~unfinished_run, ~uninitialised_backfill)
+            .order_by(DagModel.dag_id)
+            .limit(DagModel.NUM_DAGS_PER_DAGRUN_QUERY)
+        )
+        for dag_model in session.scalars(
+            with_row_locks(query, of=DagModel, session=session, skip_locked=True)
+        ):
+            dag_model.set_scheduling_state(DagSchedulingState.PAUSED)
+            session.add(
+                Log(
+                    event="drain_completed",
+                    dag_id=dag_model.dag_id,
+                    owner="scheduler",
+                    owner_display_name="Scheduler",
+                )
+            )
+            self.log.info("Dag %s finished draining and is now paused", dag_model.dag_id)
 
     def _create_dag_runs(self, dag_models: Collection[DagModel], session: Session) -> None:
         """Create a DAG run and update the dag_model to control if/when the next DAGRun should be created."""

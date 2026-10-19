@@ -40,7 +40,9 @@ from airflow.models.asset import (
     AssetModel,
     AssetPartitionDagRun,
     DagScheduleAssetAliasReference,
+    DagScheduleAssetNameReference,
     DagScheduleAssetReference,
+    DagScheduleAssetUriReference,
 )
 from airflow.models.dag import DAG, DagModel
 from airflow.models.dagbundle import DagBundleModel
@@ -52,6 +54,7 @@ from airflow.partition_mappers.window import WeekWindow
 from airflow.providers.standard.operators.empty import EmptyOperator
 from airflow.sdk.definitions.asset import Asset
 from airflow.sdk.definitions.timetables.assets import PartitionedAssetTimetable
+from airflow.utils.state import DagSchedulingState
 
 from tests_common.test_utils.config import conf_vars
 from tests_common.test_utils.db import (
@@ -646,6 +649,39 @@ class TestAssetManager:
         assert apdr.rollup_fingerprint == expected_fp, (
             "APDR rollup_fingerprint must match compute_rollup_fingerprint(timetable)"
         )
+
+    @pytest.mark.parametrize("reference", ["asset", "alias", "name", "uri"])
+    @pytest.mark.usefixtures("testing_dag_bundle")
+    def test_register_asset_change_does_not_queue_draining_dag(self, session, reference):
+        asm = AssetModel(uri="test://draining_asset/", name="draining_asset", group="asset")
+        asam = AssetAliasModel(name="draining_alias", group="test")
+        draining_dag = DagModel(dag_id="draining_dag", bundle_name="testing", is_stale=False)
+        active_dag = DagModel(dag_id="active_dag", bundle_name="testing", is_stale=False)
+        session.add_all([asm, asam, draining_dag, active_dag])
+        session.flush()
+        draining_dag.set_scheduling_state(DagSchedulingState.DRAINING)
+        references = {
+            "asset": lambda dag_id: asm.scheduled_dags.append(DagScheduleAssetReference(dag_id=dag_id)),
+            "alias": lambda dag_id: asam.scheduled_dags.append(
+                DagScheduleAssetAliasReference(alias_id=asam.id, dag_id=dag_id)
+            ),
+            "name": lambda dag_id: session.add(DagScheduleAssetNameReference(dag_id=dag_id, name=asm.name)),
+            "uri": lambda dag_id: session.add(DagScheduleAssetUriReference(dag_id=dag_id, uri=asm.uri)),
+        }
+        for dag in (draining_dag, active_dag):
+            references[reference](dag.dag_id)
+        session.flush()
+
+        AssetManager.register_asset_change(
+            task_instance=None,
+            asset=Asset(uri="test://draining_asset/", name="draining_asset"),
+            source_alias_names=["draining_alias"] if reference == "alias" else [],
+            session=session,
+        )
+        session.flush()
+
+        assert session.scalar(select(func.count()).select_from(AssetEvent)) == 1
+        assert session.scalars(select(AssetDagRunQueue.target_dag_id)).all() == ["active_dag"]
 
     @pytest.mark.usefixtures("testing_dag_bundle")
     def test_register_asset_change_queues_stale_dag(self, session, mock_task_instance):

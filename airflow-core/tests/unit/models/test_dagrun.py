@@ -84,7 +84,7 @@ from airflow.task.trigger_rule import TriggerRule
 from airflow.triggers.base import StartTriggerArgs
 from airflow.utils.session import create_session
 from airflow.utils.sqlalchemy import prohibit_commit
-from airflow.utils.state import DagRunState, State, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, State, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils import db
@@ -1094,7 +1094,13 @@ class TestDagRun:
 
         assert runs == [dr]
 
-        orm_dag.is_paused = True
+        orm_dag.set_scheduling_state(DagSchedulingState.DRAINING)
+        session.merge(orm_dag)
+        session.commit()
+
+        assert fetch().all() == [dr]
+
+        orm_dag.set_scheduling_state(DagSchedulingState.PAUSED)
         session.merge(orm_dag)
         session.commit()
 

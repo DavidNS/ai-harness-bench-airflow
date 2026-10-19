@@ -52,7 +52,7 @@ from airflow.timetables.base import Timetable
 from airflow.triggers.base import TriggerEvent
 from airflow.utils.cli import get_db_dag
 from airflow.utils.session import create_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 from tests_common.test_utils.config import conf_vars
@@ -650,6 +650,30 @@ class TestCliDags:
             dag_command.dag_pause(args)
         out = temp_stdout.splitlines()[-1]
         assert out == "No unpaused DAGs were found"
+
+    @pytest.mark.parametrize("command", ["pause", "unpause"])
+    def test_pause_unpause_clear_draining(self, command):
+        with create_session() as session:
+            session.get(DagModel, "example_bash_operator").set_scheduling_state(DagSchedulingState.DRAINING)
+
+        dag_command_fn = getattr(dag_command, f"dag_{command}")
+        dag_command_fn(self.parser.parse_args(["dags", command, "example_bash_operator"]))
+
+        dag_model = DagModel.get_dagmodel("example_bash_operator")
+        assert dag_model.is_draining is False
+        assert dag_model.scheduling_state == (
+            DagSchedulingState.PAUSED if command == "pause" else DagSchedulingState.ACTIVE
+        )
+
+    def test_cli_get_dag_details_includes_scheduling_state(self, stdout_capture):
+        with create_session() as session:
+            session.get(DagModel, "example_bash_operator").set_scheduling_state(DagSchedulingState.DRAINING)
+
+        args = self.parser.parse_args(["dags", "details", "example_bash_operator", "--output", "json"])
+        with stdout_capture as temp_stdout:
+            dag_command.dag_details(args)
+
+        assert json.loads(temp_stdout.getvalue())[0]["scheduling_state"] == "draining"
 
     def test_trigger_dag(self):
         dag_command.dag_trigger(

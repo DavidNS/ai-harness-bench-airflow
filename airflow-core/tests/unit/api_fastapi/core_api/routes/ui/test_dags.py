@@ -34,7 +34,7 @@ from airflow.models.dag_favorite import DagFavorite
 from airflow.models.hitl import HITLDetail
 from airflow.sdk.timezone import utcnow
 from airflow.utils.session import NEW_SESSION, provide_session
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunTriggeredByType, DagRunType
 
 from tests_common.test_utils.asserts import count_queries
@@ -148,6 +148,60 @@ class TestGetDagRuns(TestPublicDagEndpoint):
 
         assert response.status_code == 200
         assert [dag["dag_id"] for dag in response.json()["dags"]] == expected_ids
+
+    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+    @pytest.mark.parametrize(
+        ("query_params", "expected_ids"),
+        [
+            ({"scheduling_state": "active"}, [DAG1_ID]),
+            ({"scheduling_state": "draining"}, [DAG2_ID]),
+            ({"scheduling_state": "paused", "exclude_stale": False}, [DAG3_ID]),
+            ({"paused": False}, [DAG1_ID, DAG2_ID]),
+            ({"paused": True, "exclude_stale": False}, [DAG3_ID]),
+            ({"scheduling_state": "draining", "paused": False}, [DAG2_ID]),
+            ({"scheduling_state": "draining", "paused": True}, []),
+        ],
+    )
+    def test_scheduling_state_filter(self, test_client, session, query_params, expected_ids):
+        session.get(DagModel, DAG2_ID).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        response = test_client.get("/dags", params=query_params)
+
+        assert response.status_code == 200
+        assert [dag["dag_id"] for dag in response.json()["dags"]] == expected_ids
+
+    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+    def test_scheduling_state_is_returned(self, test_client, session):
+        session.get(DagModel, DAG2_ID).set_scheduling_state(DagSchedulingState.DRAINING)
+        session.commit()
+
+        response = test_client.get("/dags", params={"exclude_stale": False})
+
+        assert {dag["dag_id"]: dag["scheduling_state"] for dag in response.json()["dags"]} == {
+            DAG1_ID: "active",
+            DAG2_ID: "draining",
+            DAG3_ID: "paused",
+        }
+
+    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+    @pytest.mark.parametrize("unfinished_state", [DagRunState.QUEUED, DagRunState.RUNNING])
+    def test_has_unfinished_runs(self, test_client, session, unfinished_state):
+        for dag_run in session.scalars(select(DagRun).where(DagRun.dag_id.in_([DAG1_ID, DAG2_ID]))):
+            dag_run.state = DagRunState.SUCCESS
+        oldest_run = session.scalar(
+            select(DagRun).where(DagRun.dag_id == DAG1_ID).order_by(DagRun.run_after.asc()).limit(1)
+        )
+        oldest_run.state = unfinished_state
+        session.commit()
+
+        response = test_client.get("/dags", params={"dag_runs_limit": 1})
+
+        assert response.status_code == 200
+        dags = {dag["dag_id"]: dag for dag in response.json()["dags"]}
+        assert dags[DAG1_ID]["has_unfinished_runs"] is True
+        assert dags[DAG1_ID]["latest_dag_runs"][0]["state"] == "success"
+        assert dags[DAG2_ID]["has_unfinished_runs"] is False
 
     @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
     @pytest.mark.parametrize("state", ["queued", "running", "failed", "success"])

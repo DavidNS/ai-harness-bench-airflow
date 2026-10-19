@@ -703,6 +703,15 @@ try pausing the Dag again, or check the console or server logs if the
 issue recurs.
 
 
+How do I stop new Dag runs while the current ones finish?
+---------------------------------------------------------
+
+Pausing a Dag leaves the queued and downstream tasks of its current runs waiting until it is unpaused. To stop
+new scheduled runs while the runs already in flight complete, set the Dag's scheduling state to ``draining``
+(``PATCH /api/v2/dags/{dag_id}`` with ``{"scheduling_state": "draining"}``). The Scheduler pauses the Dag by itself
+once it has no queued or running Dag run left. See :ref:`Dag draining <concepts:dag-draining>` for details.
+
+
 API Server
 ^^^^^^^^^^
 
