@@ -836,6 +836,30 @@ it in three steps:
 * delete the historical metadata from the database, via UI or API
 * delete the Dag file from the ``DAGS_FOLDER`` and wait until it becomes inactive
 
+.. _concepts:dag-draining:
+
+Dag draining
+------------
+
+Pausing a Dag stops the scheduler from creating runs, but it also leaves the queued and downstream tasks of the
+runs already in flight waiting until the Dag is unpaused. To stop new scheduled runs while letting the current
+ones finish, put the Dag in the ``draining`` scheduling state instead.
+
+A Dag has one of three scheduling states: ``active``, ``draining`` and ``paused``. ``draining`` is transient:
+while a Dag is draining, the scheduler
+
+* does not create new scheduled runs, and records asset events for the Dag without queueing runs from them;
+* keeps scheduling and queueing the task instances of its queued and running runs exactly as for an ``active`` Dag;
+* pauses the Dag by itself once it has no queued or running run and no backfill that is still being initialised.
+  The scheduler records a ``drain_completed`` entry in the audit log when it does.
+
+Manual triggers and backfills remain available while a Dag is draining, as they are for a paused Dag; the runs they
+create extend the drain until they finish.
+
+The scheduling state is available as ``scheduling_state`` in the REST API, where ``PATCH /dags/{dag_id}`` accepts
+either ``is_paused`` or ``scheduling_state``. ``is_paused`` keeps its meaning: it is ``false`` for a draining Dag.
+``airflow dags pause`` and ``airflow dags unpause`` set the ``paused`` and ``active`` states and end a drain.
+
 Dag Auto-pausing (Experimental)
 -------------------------------
 Dags can be configured to be auto-paused as well.

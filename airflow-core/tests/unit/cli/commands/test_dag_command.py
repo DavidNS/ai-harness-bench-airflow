@@ -643,6 +643,36 @@ class TestCliDags:
         out = temp_stdout.splitlines()[-1]
         assert out == "No paused DAGs were found"
 
+    @pytest.fixture
+    def restore_scheduling_state(self):
+        yield
+        with create_session() as session:
+            for dag_id in ("example_bash_operator", "example_complex"):
+                session.get(DagModel, dag_id).set_scheduling_state("active")
+
+    @pytest.mark.parametrize(
+        ("command", "expected_state"),
+        [(dag_command.dag_pause, "paused"), (dag_command.dag_unpause, "active")],
+    )
+    def test_pause_unpause_draining_dag(self, command, expected_state, restore_scheduling_state):
+        with create_session() as session:
+            session.get(DagModel, "example_bash_operator").set_scheduling_state("draining")
+
+        command(self.parser.parse_args(["dags", "pause", "example_bash_operator"]))
+
+        dag_model = DagModel.get_dagmodel("example_bash_operator")
+        assert dag_model.scheduling_state == expected_state
+        assert dag_model.is_draining is False
+
+    def test_cli_get_dag_details_scheduling_state(self, stdout_capture, restore_scheduling_state):
+        with create_session() as session:
+            session.get(DagModel, "example_complex").set_scheduling_state("draining")
+        args = self.parser.parse_args(["dags", "details", "example_complex", "--output", "json"])
+        with stdout_capture as temp_stdout:
+            dag_command.dag_details(args)
+
+        assert json.loads(temp_stdout.getvalue())[0]["scheduling_state"] == "draining"
+
     def test_pausing_already_paused_dag_do_not_error(self, stdout_capture):
         args = self.parser.parse_args(["dags", "pause", "example_bash_operator", "--yes"])
         with stdout_capture as temp_stdout:

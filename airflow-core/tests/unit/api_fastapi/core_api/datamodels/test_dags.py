@@ -19,12 +19,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from airflow._shared.module_loading import qualname
 from airflow.api_fastapi.core_api.datamodels.dags import (
     DAGDetailsResponse,
+    DAGPatchBody,
     DAGResponse,
 )
+from airflow.utils.state import DagSchedulingState
 from airflow.utils.types import DagRunType
 
 
@@ -174,3 +177,36 @@ class TestIsBackfillable:
             allowed_run_types=[DagRunType.BACKFILL_JOB, DagRunType.MANUAL],
         )
         assert dag.is_backfillable is False
+
+
+class TestSchedulingState:
+    def test_response_defaults_to_active(self):
+        assert _make_dag_response().scheduling_state == DagSchedulingState.ACTIVE
+
+    def test_response_reflects_value(self):
+        assert _make_dag_response(scheduling_state="draining").scheduling_state == "draining"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"is_paused": True},
+            {"is_paused": False, "scheduling_state": None},
+            {"scheduling_state": "draining"},
+            {"is_paused": None, "scheduling_state": "paused"},
+        ],
+    )
+    def test_patch_body_accepts_exactly_one_field(self, body):
+        assert DAGPatchBody.model_validate(body)
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"is_paused": None},
+            {"is_paused": None, "scheduling_state": None},
+            {"is_paused": True, "scheduling_state": "draining"},
+        ],
+    )
+    def test_patch_body_rejects_other_combinations(self, body):
+        with pytest.raises(ValidationError):
+            DAGPatchBody.model_validate(body)

@@ -1351,6 +1351,132 @@ class TestSchedulerJob:
         assert ti1.state == TaskInstanceState.QUEUED
         session.rollback()
 
+    @pytest.mark.parametrize(
+        ("scheduling_state", "expected_ti_state"),
+        [
+            ("active", TaskInstanceState.QUEUED),
+            ("draining", TaskInstanceState.QUEUED),
+            ("paused", TaskInstanceState.SCHEDULED),
+        ],
+    )
+    def test_enqueue_task_instances_follows_scheduling_state(
+        self, dag_maker, session, scheduling_state, expected_ti_state
+    ):
+        with dag_maker(dag_id="draining_enqueue_dag", session=session):
+            EmptyOperator(task_id="dummy_task")
+        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
+        dr = dag_maker.create_dagrun(run_type=DagRunType.SCHEDULED)
+        (ti,) = dr.task_instances
+        ti.state = TaskInstanceState.SCHEDULED
+        session.get(DagModel, dr.dag_id).set_scheduling_state(scheduling_state)
+        session.flush()
+
+        self.job_runner._critical_section_enqueue_task_instances(session)
+        session.flush()
+
+        assert dr.get_task_instance("dummy_task", session=session).state == expected_ti_state
+
+    @pytest.mark.parametrize(
+        ("run_state", "backfill", "expected_state"),
+        [
+            (None, None, "paused"),
+            (DagRunState.QUEUED, None, "draining"),
+            (DagRunState.RUNNING, None, "draining"),
+            (DagRunState.SUCCESS, None, "paused"),
+            (DagRunState.FAILED, None, "paused"),
+            (None, "uninitialized", "draining"),
+            (None, "completed", "paused"),
+            (DagRunState.SUCCESS, "initialized", "paused"),
+        ],
+    )
+    def test_finalize_draining_dags(self, dag_maker, session, run_state, backfill, expected_state):
+        clear_db_backfills()
+        with dag_maker(dag_id="draining_dag", session=session):
+            EmptyOperator(task_id="dummy_task")
+        session.get(DagModel, "draining_dag").set_scheduling_state("draining")
+        if run_state:
+            dr = dag_maker.create_dagrun(run_type=DagRunType.SCHEDULED, state=run_state)
+        if backfill:
+            bf = Backfill(
+                dag_id="draining_dag",
+                from_date=timezone.datetime(2021, 1, 1),
+                to_date=timezone.datetime(2021, 1, 2),
+                completed_at=timezone.utcnow() if backfill == "completed" else None,
+            )
+            session.add(bf)
+            session.flush()
+            if backfill == "initialized":
+                session.add(
+                    BackfillDagRun(
+                        backfill_id=bf.id,
+                        dag_run_id=dr.id,
+                        logical_date=dr.logical_date,
+                        sort_ordinal=1,
+                    )
+                )
+        session.flush()
+        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
+
+        self.job_runner._finalize_draining_dags(session)
+        session.flush()
+
+        dag_model = session.get(DagModel, "draining_dag")
+        assert dag_model.scheduling_state == expected_state
+        logs = session.scalars(select(Log).where(Log.event == "drain_completed")).all()
+        if expected_state == "paused":
+            assert [(log.dag_id, log.owner) for log in logs] == [("draining_dag", "scheduler")]
+        else:
+            assert logs == []
+
+    def test_finalize_draining_dags_ignores_active_and_paused_dags(self, dag_maker, session):
+        for dag_id, state in (("active_dag", "active"), ("paused_dag", "paused")):
+            with dag_maker(dag_id=dag_id, session=session):
+                EmptyOperator(task_id="dummy_task")
+            session.get(DagModel, dag_id).set_scheduling_state(state)
+        session.flush()
+        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
+
+        self.job_runner._finalize_draining_dags(session)
+
+        assert session.scalars(select(Log).where(Log.event == "drain_completed")).all() == []
+        assert session.get(DagModel, "active_dag").scheduling_state == "active"
+
+    @mock.patch.object(DagModel, "NUM_DAGS_PER_DAGRUN_QUERY", 2)
+    def test_finalize_draining_dags_processes_in_dag_id_order_with_limit(self, dag_maker, session):
+        for dag_id in ("dag_c", "dag_a", "dag_b"):
+            with dag_maker(dag_id=dag_id, session=session):
+                EmptyOperator(task_id="dummy_task")
+            session.get(DagModel, dag_id).set_scheduling_state("draining")
+        session.flush()
+        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
+
+        self.job_runner._finalize_draining_dags(session)
+
+        states = {
+            dag_id: session.get(DagModel, dag_id).scheduling_state for dag_id in ("dag_a", "dag_b", "dag_c")
+        }
+        assert states == {"dag_a": "paused", "dag_b": "paused", "dag_c": "draining"}
+
+    @mock.patch("airflow.jobs.scheduler_job_runner.with_row_locks", autospec=True)
+    def test_finalize_draining_dags_locks_rows(self, mock_with_row_locks, session):
+        mock_with_row_locks.side_effect = lambda query, **kwargs: query
+        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
+
+        self.job_runner._finalize_draining_dags(session)
+
+        assert mock_with_row_locks.call_args.kwargs["of"] is DagModel
+        assert mock_with_row_locks.call_args.kwargs["skip_locked"] is True
+
+    @mock.patch("airflow.jobs.scheduler_job_runner.EventScheduler", autospec=True)
+    def test_scheduler_loop_registers_finalize_draining_dags(self, mock_event_scheduler, mock_executors):
+        self.job_runner = SchedulerJobRunner(Job(), num_runs=1)
+
+        self.job_runner._execute()
+
+        mock_event_scheduler.return_value.call_regular_interval.assert_any_call(
+            5.0, self.job_runner._finalize_draining_dags
+        )
+
     def test_setup_callback_sink_standalone_dag_processor(self, mock_executors):
         scheduler_job = Job()
         self.job_runner = SchedulerJobRunner(job=scheduler_job, num_runs=1)
@@ -11180,6 +11306,27 @@ def test_mark_backfills_completed(dag_maker, session):
     assert b.completed_at.timestamp() > 0
 
 
+def test_backfill_can_be_created_for_draining_dag(dag_maker, session):
+    clear_db_backfills()
+    with dag_maker(serialized=True, dag_id="test_backfill_draining", schedule="@daily") as dag:
+        EmptyOperator(task_id="hi")
+    session.get(DagModel, dag.dag_id).set_scheduling_state("draining")
+    session.commit()
+
+    _create_backfill(
+        dag_id=dag.dag_id,
+        from_date=pendulum.parse("2021-01-01"),
+        to_date=pendulum.parse("2021-01-03"),
+        max_active_runs=10,
+        reverse=False,
+        triggering_user_name="test_user",
+        dag_run_conf={},
+    )
+
+    assert session.scalar(select(func.count()).select_from(DagRun).where(DagRun.dag_id == dag.dag_id)) == 3
+    assert session.get(DagModel, dag.dag_id).scheduling_state == "draining"
+
+
 def test_mark_backfills_complete_skips_initializing_backfill(dag_maker, session):
     clear_db_backfills()
     dag_id = "test_backfill_race_lifecycle"
@@ -14092,3 +14239,36 @@ class TestSchedulerObservabilityMetrics:
             self.job_runner._find_and_purge_task_instances_without_heartbeats()
 
         mock_stats.incr.assert_not_called()
+
+
+@pytest.mark.need_serialized_dag
+@pytest.mark.usefixtures("clear_asset_partition_rows")
+def test_draining_dag_gets_no_partitioned_asset_dag_run(dag_maker: DagMaker, session: Session):
+    asset_1 = Asset(name="asset-1")
+    with dag_maker(
+        dag_id="asset-event-consumer",
+        schedule=PartitionedAssetTimetable(assets=asset_1, default_partition_mapper=IdentityMapper()),
+        session=session,
+    ):
+        EmptyOperator(task_id="hi")
+    runner = SchedulerJobRunner(
+        job=Job(job_type=SchedulerJobRunner.job_type), executors=[MockExecutor(do_update=False)]
+    )
+    apdr = _produce_and_register_asset_event(
+        dag_id="asset-event-producer",
+        asset=asset_1,
+        partition_key="key-1",
+        session=session,
+        dag_maker=dag_maker,
+    )
+    session.get(DagModel, "asset-event-consumer").set_scheduling_state("draining")
+    session.commit()
+
+    assert runner._create_dagruns_for_partitioned_asset_dags(session=session) == set()
+    session.refresh(apdr)
+    assert apdr.created_dag_run_id is None
+
+    session.get(DagModel, "asset-event-consumer").set_scheduling_state("active")
+    session.commit()
+
+    assert runner._create_dagruns_for_partitioned_asset_dags(session=session) == {"asset-event-consumer"}

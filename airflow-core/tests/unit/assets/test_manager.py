@@ -40,7 +40,9 @@ from airflow.models.asset import (
     AssetModel,
     AssetPartitionDagRun,
     DagScheduleAssetAliasReference,
+    DagScheduleAssetNameReference,
     DagScheduleAssetReference,
+    DagScheduleAssetUriReference,
 )
 from airflow.models.dag import DAG, DagModel
 from airflow.models.dagbundle import DagBundleModel
@@ -189,6 +191,54 @@ class TestAssetManager:
             == 1
         )
         assert session.scalar(select(func.count()).select_from(AssetDagRunQueue)) == 2
+
+    @pytest.fixture
+    def clean_dags(self):
+        from tests_common.test_utils.db import clear_db_dags
+
+        clear_db_dags()
+        yield
+        clear_db_dags()
+
+    @pytest.mark.usefixtures("clean_dags")
+    @pytest.mark.parametrize("reference", ["direct", "alias", "name", "uri"])
+    def test_register_asset_change_skips_draining_dag(
+        self, session, mock_task_instance, testing_dag_bundle, reference
+    ):
+        active_dag = DagModel(dag_id="active_dag", bundle_name="testing", is_stale=False, is_paused=False)
+        draining_dag = DagModel(dag_id="draining_dag", bundle_name="testing", is_stale=False)
+        draining_dag.set_scheduling_state("draining")
+        session.add_all([active_dag, draining_dag])
+        asm = AssetModel(uri="test://asset1/", name="test_asset_uri", group="asset")
+        asam = AssetAliasModel(name="test_alias_name", group="test")
+        session.add_all([asm, asam])
+        session.flush()
+        for dag in (active_dag, draining_dag):
+            if reference == "direct":
+                asm.scheduled_dags.append(DagScheduleAssetReference(dag_id=dag.dag_id))
+            elif reference == "alias":
+                asam.scheduled_dags.append(
+                    DagScheduleAssetAliasReference(alias_id=asam.id, dag_id=dag.dag_id)
+                )
+            elif reference == "name":
+                session.add(DagScheduleAssetNameReference(name=asm.name, dag_id=dag.dag_id))
+            else:
+                session.add(DagScheduleAssetUriReference(uri=asm.uri, dag_id=dag.dag_id))
+        session.flush()
+
+        AssetManager().register_asset_change(
+            task_instance=mock_task_instance,
+            asset=Asset(uri="test://asset1", name="test_asset_uri"),
+            source_alias_names=["test_alias_name"] if reference == "alias" else (),
+            session=session,
+        )
+        session.flush()
+
+        assert (
+            session.scalar(select(func.count()).select_from(AssetEvent).where(AssetEvent.asset_id == asm.id))
+            == 1
+        )
+        assert session.scalars(select(AssetDagRunQueue.target_dag_id)).all() == ["active_dag"]
 
     def test_register_asset_change_no_downstreams(self, session, mock_task_instance):
         asset_manager = AssetManager()

@@ -1,0 +1,10 @@
+Dags can now be drained: stop new scheduled runs while the runs in flight finish
+
+A Dag now has a ``scheduling_state`` of ``active``, ``draining`` or ``paused``. While a Dag is ``draining`` the
+scheduler creates no new scheduled or asset-triggered runs but keeps scheduling the task instances of its queued
+and running runs, and it pauses the Dag by itself once those runs have finished. Manual triggers and backfills
+remain available.
+
+The REST API ``PATCH /dags/{dag_id}`` and ``PATCH /dags`` endpoints accept either ``is_paused`` or
+``scheduling_state``, and the Dag responses include ``scheduling_state``. ``is_paused`` keeps its meaning, so
+existing clients continue to work unchanged. ``airflow dags pause`` and ``airflow dags unpause`` end a drain.

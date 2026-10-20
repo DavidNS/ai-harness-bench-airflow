@@ -73,7 +73,7 @@ from airflow.models.variable import Variable
 from airflow.models.xcom import XComModel
 from airflow.typing_compat import Self
 from airflow.utils.sqlalchemy import JsonContains, apply_regex_query_timeout
-from airflow.utils.state import DagRunState, TaskInstanceState
+from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
 from airflow.utils.types import DagRunType
 
 if TYPE_CHECKING:
@@ -1407,8 +1407,31 @@ class _AssetDependencyFilter(BaseParam[str]):
         return cls().set_value(asset_dependency)
 
 
+class _SchedulingStateFilter(BaseParam[DagSchedulingState]):
+    """Filter Dags by scheduling state."""
+
+    def to_orm(self, select: Select) -> Select:
+        if self.value is None:
+            return select
+        if self.value == DagSchedulingState.DRAINING:
+            return select.where(DagModel.is_draining.is_(True))
+        if self.value == DagSchedulingState.PAUSED:
+            return select.where(DagModel.is_paused.is_(True))
+        return select.where(DagModel.is_paused.is_(False), DagModel.is_draining.is_(False))
+
+    @classmethod
+    def depends(
+        cls,
+        scheduling_state: DagSchedulingState | None = Query(
+            None, description="Filter Dags by scheduling state (active, draining, paused)"
+        ),
+    ) -> _SchedulingStateFilter:
+        return cls().set_value(scheduling_state)
+
+
 QueryHasAssetScheduleFilter = Annotated[_HasAssetScheduleFilter, Depends(_HasAssetScheduleFilter.depends)]
 QueryAssetDependencyFilter = Annotated[_AssetDependencyFilter, Depends(_AssetDependencyFilter.depends)]
+QuerySchedulingStateFilter = Annotated[_SchedulingStateFilter, Depends(_SchedulingStateFilter.depends)]
 
 
 class _ConsumingAssetFilter(BaseParam[str | None]):

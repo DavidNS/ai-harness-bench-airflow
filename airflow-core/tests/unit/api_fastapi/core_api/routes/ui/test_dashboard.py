@@ -392,6 +392,16 @@ class TestDagStatsEndpoint:
             "queued_dag_count": 1,
         }
 
+    @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_dag_runs")
+    def test_active_dag_count_excludes_draining_dags(self, test_client, session):
+        session.get(DagModel, "test_dag_id").set_scheduling_state("draining")
+        session.commit()
+
+        response = test_client.get("/dashboard/dag_stats")
+
+        assert response.status_code == 200
+        assert response.json()["active_dag_count"] == 0
+
     @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_failed_dag_runs")
     def test_should_response_200_failed_dag(self, test_client):
         with assert_queries_count(3):

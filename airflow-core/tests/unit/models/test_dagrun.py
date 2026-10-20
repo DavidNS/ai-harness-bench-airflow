@@ -1094,7 +1094,13 @@ class TestDagRun:
 
         assert runs == [dr]
 
-        orm_dag.is_paused = True
+        orm_dag.set_scheduling_state("draining")
+        session.merge(orm_dag)
+        session.commit()
+
+        assert fetch().all() == [dr]
+
+        orm_dag.set_scheduling_state("paused")
         session.merge(orm_dag)
         session.commit()
 

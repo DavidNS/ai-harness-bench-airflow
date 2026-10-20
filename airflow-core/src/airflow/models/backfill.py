@@ -33,6 +33,7 @@ import structlog
 from sqlalchemy import (
     Boolean,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     UniqueConstraint,
@@ -196,6 +197,8 @@ class Backfill(Base):
         viewonly=True,
         foreign_keys=[dag_id],
     )
+
+    __table_args__ = (Index("idx_backfill_dag_id_completed_at", dag_id, completed_at),)
 
     def __repr__(self):
         return f"Backfill({self.dag_id=}, {self.from_date=}, {self.to_date=})"

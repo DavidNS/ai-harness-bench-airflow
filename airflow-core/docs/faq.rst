@@ -114,6 +114,15 @@ Airflow 2.0 has low Dag scheduling latency out of the box (particularly when com
 however, if you need more throughput you can :ref:`start multiple schedulers<scheduler:ha>`.
 
 
+How do I stop new Dag runs while letting the current ones finish?
+-----------------------------------------------------------------
+
+Set the Dag to the ``draining`` scheduling state, for example before an upgrade or a maintenance window, instead of
+pausing it or setting its schedule to ``None``. A draining Dag gets no new scheduled runs, while the task instances of
+its queued and running runs keep being scheduled until they finish. The scheduler then pauses the Dag by itself.
+Unpause the Dag once the maintenance is done. See :ref:`concepts:dag-draining`.
+
+
 How do I trigger tasks based on another task's failure?
 -------------------------------------------------------
 
