@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261020T081745Z-237b12
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 3 items
+
+airflow-core/tests/unit/cli/commands/test_aih_probe_x.py::test_probe_cli[pause-dag_pause-paused] PASSED [ 33%]
+airflow-core/tests/unit/cli/commands/test_aih_probe_x.py::test_probe_cli[unpause-dag_unpause-active] PASSED [ 66%]
+airflow-core/tests/unit/cli/commands/test_aih_probe_x.py::test_probe_details PASSED [100%]
+==================== Warning summary. Total: 97, Unique: 13 ====================
+other: total 13, unique 3
+  collect: total 1, unique 1
+  runtest: total 12, unique 2
+providers: total 8, unique 1
+  runtest: total 8, unique 1
+tests: total 76, unique 9
+  runtest: total 76, unique 9
+Warnings saved into /work/aih/worktrees/20261020T081745Z-237b12/devel-common/warnings.txt file.
+
+======================== 3 passed, 1 warning in 15.70s =========================

@@ -1,0 +1,15 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.6.0 -- /work/venv-arm/bin/python
+rootdir: /work/aih/worktrees/20261020T081745Z-237b12
+configfile: pyproject.toml
+plugins: anyio-4.15.1, time-machine-3.5.0, mock-3.15.1, cov-7.1.0, unordered-0.8.0, xdist-3.8.0, asyncio-1.4.0, requests-mock-1.12.1, rerunfailures-16.6.1, icdiff-0.9, kgb-7.3, timeouts-1.2.1, custom-exit-code-0.3.0, instafail-0.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+setup timeout: 0.0s, execution timeout: 0.0s, teardown timeout: 0.0s
+collecting ... collected 4 items
+
+airflow-core/tests/unit/models/test_aih_probe_x.py::test_probe_enum PASSED [ 25%]
+airflow-core/tests/unit/models/test_aih_probe_x.py::test_probe_model PASSED [ 50%]
+airflow-core/tests/unit/models/test_aih_probe_x.py::test_probe_needing_dagruns PASSED [ 75%]
+airflow-core/tests/unit/models/test_aih_probe_x.py::test_probe_autopause_clears_draining PASSED [100%]
+
+======================== 4 passed, 1 warning in 12.70s =========================

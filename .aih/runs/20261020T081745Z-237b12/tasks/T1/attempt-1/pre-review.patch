@@ -1,0 +1,1736 @@
+diff --git a/airflow-core/docs/core-concepts/dags.rst b/airflow-core/docs/core-concepts/dags.rst
+index ab397f3532..aa6f3a8339 100644
+--- a/airflow-core/docs/core-concepts/dags.rst
++++ b/airflow-core/docs/core-concepts/dags.rst
+@@ -836,6 +836,30 @@ it in three steps:
+ * delete the historical metadata from the database, via UI or API
+ * delete the Dag file from the ``DAGS_FOLDER`` and wait until it becomes inactive
+ 
++.. _concepts:dag-draining:
++
++Dag draining
++------------
++
++Pausing a Dag stops the scheduler from creating runs, but it also leaves the queued and downstream tasks of the
++runs already in flight waiting until the Dag is unpaused. To stop new scheduled runs while letting the current
++ones finish, put the Dag in the ``draining`` scheduling state instead.
++
++A Dag has one of three scheduling states: ``active``, ``draining`` and ``paused``. ``draining`` is transient:
++while a Dag is draining, the scheduler
++
++* does not create new scheduled runs, and records asset events for the Dag without queueing runs from them;
++* keeps scheduling and queueing the task instances of its queued and running runs exactly as for an ``active`` Dag;
++* pauses the Dag by itself once it has no queued or running run and no backfill that is still being initialised.
++  The scheduler records a ``drain_completed`` entry in the audit log when it does.
++
++Manual triggers and backfills remain available while a Dag is draining, as they are for a paused Dag; the runs they
++create extend the drain until they finish.
++
++The scheduling state is available as ``scheduling_state`` in the REST API, where ``PATCH /dags/{dag_id}`` accepts
++either ``is_paused`` or ``scheduling_state``. ``is_paused`` keeps its meaning: it is ``false`` for a draining Dag.
++``airflow dags pause`` and ``airflow dags unpause`` set the ``paused`` and ``active`` states and end a drain.
++
+ Dag Auto-pausing (Experimental)
+ -------------------------------
+ Dags can be configured to be auto-paused as well.
+diff --git a/airflow-core/docs/faq.rst b/airflow-core/docs/faq.rst
+index a694f83e53..977e6654b4 100644
+--- a/airflow-core/docs/faq.rst
++++ b/airflow-core/docs/faq.rst
+@@ -114,6 +114,15 @@ Airflow 2.0 has low Dag scheduling latency out of the box (particularly when com
+ however, if you need more throughput you can :ref:`start multiple schedulers<scheduler:ha>`.
+ 
+ 
++How do I stop new Dag runs while letting the current ones finish?
++-----------------------------------------------------------------
++
++Set the Dag to the ``draining`` scheduling state, for example before an upgrade or a maintenance window, instead of
++pausing it or setting its schedule to ``None``. A draining Dag gets no new scheduled runs, while the task instances of
++its queued and running runs keep being scheduled until they finish. The scheduler then pauses the Dag by itself.
++Unpause the Dag once the maintenance is done. See :ref:`concepts:dag-draining`.
++
++
+ How do I trigger tasks based on another task's failure?
+ -------------------------------------------------------
+ 
+diff --git a/airflow-core/docs/migrations-ref.rst b/airflow-core/docs/migrations-ref.rst
+index e8bef749a6..a77648e7a8 100644
+--- a/airflow-core/docs/migrations-ref.rst
++++ b/airflow-core/docs/migrations-ref.rst
+@@ -39,7 +39,10 @@ Here's the list of all the Database Migrations that are executed via when you ru
+ +-------------------------+------------------+-------------------+--------------------------------------------------------------+
+ | Revision ID             | Revises ID       | Airflow Version   | Description                                                  |
+ +=========================+==================+===================+==============================================================+
+-| ``f8c2a1d94e03`` (head) | ``8d3f1a6b2c47`` | ``3.4.0``         | Add team_name and bundle_names scope columns to job table.   |
++| ``c4d9e7a3b165`` (head) | ``f8c2a1d94e03`` | ``3.4.0``         | Add is_draining to dag and an index on backfill (dag_id,     |
++|                         |                  |                   | completed_at).                                               |
+++-------------------------+------------------+-------------------+--------------------------------------------------------------+
++| ``f8c2a1d94e03``        | ``8d3f1a6b2c47`` | ``3.4.0``         | Add team_name and bundle_names scope columns to job table.   |
+ +-------------------------+------------------+-------------------+--------------------------------------------------------------+
+ | ``8d3f1a6b2c47``        | ``c7f0a5d2e9b4`` | ``3.4.0``         | Add team_name to log.                                        |
+ +-------------------------+------------------+-------------------+--------------------------------------------------------------+
+diff --git a/airflow-core/newsfragments/22006.significant.rst b/airflow-core/newsfragments/22006.significant.rst
+new file mode 100644
+index 0000000000..bfc6fe43a6
+--- /dev/null
++++ b/airflow-core/newsfragments/22006.significant.rst
+@@ -0,0 +1,10 @@
++Dags can now be drained: stop new scheduled runs while the runs in flight finish
++
++A Dag now has a ``scheduling_state`` of ``active``, ``draining`` or ``paused``. While a Dag is ``draining`` the
++scheduler creates no new scheduled or asset-triggered runs but keeps scheduling the task instances of its queued
++and running runs, and it pauses the Dag by itself once those runs have finished. Manual triggers and backfills
++remain available.
++
++The REST API ``PATCH /dags/{dag_id}`` and ``PATCH /dags`` endpoints accept either ``is_paused`` or
++``scheduling_state``, and the Dag responses include ``scheduling_state``. ``is_paused`` keeps its meaning, so
++existing clients continue to work unchanged. ``airflow dags pause`` and ``airflow dags unpause`` end a drain.
+diff --git a/airflow-core/src/airflow/api_fastapi/common/parameters.py b/airflow-core/src/airflow/api_fastapi/common/parameters.py
+index a7a870df99..27f57e8f2d 100644
+--- a/airflow-core/src/airflow/api_fastapi/common/parameters.py
++++ b/airflow-core/src/airflow/api_fastapi/common/parameters.py
+@@ -73,7 +73,7 @@ from airflow.models.variable import Variable
+ from airflow.models.xcom import XComModel
+ from airflow.typing_compat import Self
+ from airflow.utils.sqlalchemy import JsonContains, apply_regex_query_timeout
+-from airflow.utils.state import DagRunState, TaskInstanceState
++from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
+ from airflow.utils.types import DagRunType
+ 
+ if TYPE_CHECKING:
+@@ -1407,8 +1407,31 @@ class _AssetDependencyFilter(BaseParam[str]):
+         return cls().set_value(asset_dependency)
+ 
+ 
++class _SchedulingStateFilter(BaseParam[DagSchedulingState]):
++    """Filter Dags by scheduling state."""
++
++    def to_orm(self, select: Select) -> Select:
++        if self.value is None:
++            return select
++        if self.value == DagSchedulingState.DRAINING:
++            return select.where(DagModel.is_draining.is_(True))
++        if self.value == DagSchedulingState.PAUSED:
++            return select.where(DagModel.is_paused.is_(True))
++        return select.where(DagModel.is_paused.is_(False), DagModel.is_draining.is_(False))
++
++    @classmethod
++    def depends(
++        cls,
++        scheduling_state: DagSchedulingState | None = Query(
++            None, description="Filter Dags by scheduling state (active, draining, paused)"
++        ),
++    ) -> _SchedulingStateFilter:
++        return cls().set_value(scheduling_state)
++
++
+ QueryHasAssetScheduleFilter = Annotated[_HasAssetScheduleFilter, Depends(_HasAssetScheduleFilter.depends)]
+ QueryAssetDependencyFilter = Annotated[_AssetDependencyFilter, Depends(_AssetDependencyFilter.depends)]
++QuerySchedulingStateFilter = Annotated[_SchedulingStateFilter, Depends(_SchedulingStateFilter.depends)]
+ 
+ 
+ class _ConsumingAssetFilter(BaseParam[str | None]):
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py b/airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py
+index e67777d6ff..7b916cd631 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py
++++ b/airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py
+@@ -31,15 +31,17 @@ from pydantic import (
+     computed_field,
+     field_serializer,
+     field_validator,
++    model_validator,
+ )
+ 
+ from airflow._shared.module_loading import qualname
+-from airflow.api_fastapi.core_api.base import BaseModel, StrictBaseModel, make_partial_model
++from airflow.api_fastapi.core_api.base import BaseModel, StrictBaseModel
+ from airflow.api_fastapi.core_api.datamodels.common import MaybeAssetExpression
+ from airflow.api_fastapi.core_api.datamodels.dag_tags import DagTagResponse
+ from airflow.api_fastapi.core_api.datamodels.dag_versions import DagVersionResponse
+ from airflow.configuration import conf
+ from airflow.models.dag_version import DagVersion
++from airflow.utils.state import DagSchedulingState
+ from airflow.utils.types import DagRunType
+ 
+ if TYPE_CHECKING:
+@@ -84,6 +86,7 @@ class DAGResponse(BaseModel):
+     dag_id: str
+     dag_display_name: str
+     is_paused: bool
++    scheduling_state: DagSchedulingState = DagSchedulingState.ACTIVE
+     is_stale: bool
+     last_parsed_time: datetime | None
+     last_parse_duration: float | None
+@@ -162,10 +165,14 @@ class DAGResponse(BaseModel):
+ class DAGPatchBody(StrictBaseModel):
+     """Dag Serializer for updatable bodies."""
+ 
+-    is_paused: bool
+-
++    is_paused: bool | None = None
++    scheduling_state: DagSchedulingState | None = None
+ 
+-DAGPatchBodyPartial = make_partial_model(DAGPatchBody)
++    @model_validator(mode="after")
++    def validate_exactly_one_field(self) -> DAGPatchBody:
++        if (self.is_paused is None) == (self.scheduling_state is None):
++            raise ValueError("Exactly one of `is_paused` or `scheduling_state` must be provided and non-null")
++        return self
+ 
+ 
+ class DAGCollectionResponse(BaseModel):
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py b/airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py
+index 6612906a6e..11a9dea5e6 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py
++++ b/airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py
+@@ -32,6 +32,7 @@ class DAGWithLatestDagRunsResponse(DAGResponse):
+     latest_dag_runs: list[DAGRunLightResponse]
+     pending_actions: list[HITLDetail]
+     is_favorite: bool
++    has_unfinished_runs: bool
+     team_name: str | None = None
+ 
+ 
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml b/airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml
+index a51f805f09..2263c806cc 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml
++++ b/airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml
+@@ -641,6 +641,16 @@ paths:
+           - type: boolean
+           - type: 'null'
+           title: Paused
++      - name: scheduling_state
++        in: query
++        required: false
++        schema:
++          anyOf:
++          - $ref: '#/components/schemas/DagSchedulingState'
++          - type: 'null'
++          description: Filter Dags by scheduling state (active, draining, paused)
++          title: Scheduling State
++        description: Filter Dags by scheduling state (active, draining, paused)
+       - name: has_import_errors
+         in: query
+         required: false
+@@ -3090,6 +3100,9 @@ components:
+         is_paused:
+           type: boolean
+           title: Is Paused
++        scheduling_state:
++          $ref: '#/components/schemas/DagSchedulingState'
++          default: active
+         is_stale:
+           type: boolean
+           title: Is Stale
+@@ -3232,6 +3245,9 @@ components:
+         is_favorite:
+           type: boolean
+           title: Is Favorite
++        has_unfinished_runs:
++          type: boolean
++          title: Has Unfinished Runs
+         team_name:
+           anyOf:
+           - type: string
+@@ -3281,6 +3297,7 @@ components:
+       - latest_dag_runs
+       - pending_actions
+       - is_favorite
++      - has_unfinished_runs
+       - is_backfillable
+       - file_token
+       title: DAGWithLatestDagRunsResponse
+@@ -3365,6 +3382,20 @@ components:
+       - updated_at
+       title: DagScheduleAssetReference
+       description: Dag schedule reference serializer for assets.
++    DagSchedulingState:
++      type: string
++      enum:
++      - active
++      - draining
++      - paused
++      title: DagSchedulingState
++      description: 'Scheduling state of a Dag.
++
++
++        ``draining`` is transient: the scheduler stops creating new runs and moves
++        the Dag to ``paused``
++
++        once its in-flight work has finished.'
+     DagTagResponse:
+       properties:
+         name:
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml b/airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml
+index bea12275f6..a9aaed6b2e 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml
++++ b/airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml
+@@ -12958,6 +12958,9 @@ components:
+         is_paused:
+           type: boolean
+           title: Is Paused
++        scheduling_state:
++          $ref: '#/components/schemas/DagSchedulingState'
++          default: active
+         is_stale:
+           type: boolean
+           title: Is Stale
+@@ -13253,12 +13256,16 @@ components:
+     DAGPatchBody:
+       properties:
+         is_paused:
+-          type: boolean
++          anyOf:
++          - type: boolean
++          - type: 'null'
+           title: Is Paused
++        scheduling_state:
++          anyOf:
++          - $ref: '#/components/schemas/DagSchedulingState'
++          - type: 'null'
+       additionalProperties: false
+       type: object
+-      required:
+-      - is_paused
+       title: DAGPatchBody
+       description: Dag Serializer for updatable bodies.
+     DAGResponse:
+@@ -13272,6 +13279,9 @@ components:
+         is_paused:
+           type: boolean
+           title: Is Paused
++        scheduling_state:
++          $ref: '#/components/schemas/DagSchedulingState'
++          default: active
+         is_stale:
+           type: boolean
+           title: Is Stale
+@@ -14141,6 +14151,20 @@ components:
+       - updated_at
+       title: DagScheduleAssetReference
+       description: Dag schedule reference serializer for assets.
++    DagSchedulingState:
++      type: string
++      enum:
++      - active
++      - draining
++      - paused
++      title: DagSchedulingState
++      description: 'Scheduling state of a Dag.
++
++
++        ``draining`` is transient: the scheduler stops creating new runs and moves
++        the Dag to ``paused``
++
++        once its in-flight work has finished.'
+     DagStatsCollectionResponse:
+       properties:
+         dags:
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py b/airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py
+index 2140707ab2..10df8143d8 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py
++++ b/airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py
+@@ -20,8 +20,6 @@ from __future__ import annotations
+ from typing import Annotated
+ 
+ from fastapi import Depends, HTTPException, Query, Response, status
+-from fastapi.exceptions import RequestValidationError
+-from pydantic import ValidationError
+ from sqlalchemy import delete, func, insert, select, update
+ 
+ from airflow.api.common import delete_dag as delete_dag_module
+@@ -62,7 +60,6 @@ from airflow.api_fastapi.core_api.datamodels.dags import (
+     DAGCollectionResponse,
+     DAGDetailsResponse,
+     DAGPatchBody,
+-    DAGPatchBodyPartial,
+     DAGResponse,
+ )
+ from airflow.api_fastapi.core_api.openapi.exceptions import create_openapi_http_exception_doc
+@@ -77,7 +74,7 @@ from airflow.exceptions import AirflowException, DagNotFound
+ from airflow.models import DagModel
+ from airflow.models.dag_favorite import DagFavorite
+ from airflow.models.dagrun import DagRun
+-from airflow.utils.state import DagRunState
++from airflow.utils.state import DagRunState, DagSchedulingState
+ 
+ dags_router = AirflowRouter(tags=["DAG"], prefix="/dags")
+ 
+@@ -272,6 +269,26 @@ def get_dag_details(
+     return DAGDetailsResponse.model_validate(dag_model)
+ 
+ 
++def _get_target_scheduling_state(
++    patch_body: DAGPatchBody, update_mask: list[str] | None
++) -> DagSchedulingState:
++    if update_mask:
++        if len(update_mask) != 1 or update_mask[0] not in ("is_paused", "scheduling_state"):
++            raise HTTPException(
++                status.HTTP_400_BAD_REQUEST,
++                "Only `is_paused` or `scheduling_state` field can be updated through the REST API",
++            )
++        body_field = "is_paused" if patch_body.is_paused is not None else "scheduling_state"
++        if update_mask[0] != body_field:
++            raise HTTPException(
++                HTTP_422_UNPROCESSABLE_CONTENT,
++                f"`update_mask` names `{update_mask[0]}` but the request body carries `{body_field}`",
++            )
++    if patch_body.scheduling_state is not None:
++        return patch_body.scheduling_state
++    return DagSchedulingState.PAUSED if patch_body.is_paused else DagSchedulingState.ACTIVE
++
++
+ @dags_router.patch(
+     "/{dag_id}",
+     responses=create_openapi_http_exception_doc(
+@@ -294,27 +311,7 @@ def patch_dag(
+     if dag is None:
+         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Dag with id: {dag_id} was not found")
+ 
+-    fields_to_update = patch_body.model_fields_set
+-    if update_mask:
+-        if update_mask != ["is_paused"]:
+-            raise HTTPException(
+-                status.HTTP_400_BAD_REQUEST, "Only `is_paused` field can be updated through the REST API"
+-            )
+-        fields_to_update = fields_to_update.intersection(update_mask)
+-        try:
+-            DAGPatchBodyPartial(**patch_body.model_dump(include=fields_to_update))
+-        except ValidationError as e:
+-            raise RequestValidationError(errors=e.errors())
+-    else:
+-        try:
+-            DAGPatchBody(**patch_body.model_dump())
+-        except ValidationError as e:
+-            raise RequestValidationError(errors=e.errors())
+-
+-    data = patch_body.model_dump(include=fields_to_update, by_alias=True)
+-
+-    for key, val in data.items():
+-        setattr(dag, key, val)
++    dag.set_scheduling_state(_get_target_scheduling_state(patch_body, update_mask))
+ 
+     return dag
+ 
+@@ -350,16 +347,7 @@ def patch_dags(
+     matched regardless of other filters. To match all Dags, pass a wildcard value such as
+     `~` or `%` for `dag_id_pattern`.
+     """
+-    if update_mask:
+-        if update_mask != ["is_paused"]:
+-            raise HTTPException(
+-                status.HTTP_400_BAD_REQUEST, "Only `is_paused` field can be updated through the REST API"
+-            )
+-    else:
+-        try:
+-            DAGPatchBody.model_validate(patch_body)
+-        except ValidationError as e:
+-            raise RequestValidationError(errors=e.errors())
++    target_state = _get_target_scheduling_state(patch_body, update_mask)
+ 
+     dags_select, total_entries = paginated_select(
+         statement=select(DagModel),
+@@ -395,7 +383,10 @@ def patch_dags(
+     session.execute(
+         update(DagModel)
+         .where(DagModel.dag_id.in_(select(filtered_dag_ids.c.dag_id)))
+-        .values(is_paused=patch_body.is_paused)
++        .values(
++            is_paused=target_state == DagSchedulingState.PAUSED,
++            is_draining=target_state == DagSchedulingState.DRAINING,
++        )
+         .execution_options(synchronize_session="fetch")
+     )
+ 
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py b/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py
+index 78ed45d973..544467eefe 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py
++++ b/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py
+@@ -51,6 +51,7 @@ from airflow.api_fastapi.common.parameters import (
+     QueryOwnersFilter,
+     QueryPausedFilter,
+     QueryPendingActionsFilter,
++    QuerySchedulingStateFilter,
+     QueryTagsFilter,
+     QueryTeamsFilter,
+     QueryTimetableTypePrefixPatternSearch,
+@@ -113,6 +114,7 @@ def get_dags(
+     dag_display_name_prefix_pattern: QueryDagDisplayNamePrefixPatternSearch,
+     exclude_stale: QueryExcludeStaleFilter,
+     paused: QueryPausedFilter,
++    scheduling_state: QuerySchedulingStateFilter,
+     has_import_errors: QueryHasImportErrorsFilter,
+     last_dag_run_state: QueryLastDagRunStateFilter,
+     dag_run_state: QueryAnyDagRunStateFilter,
+@@ -160,6 +162,7 @@ def get_dags(
+         filters=[
+             exclude_stale,
+             paused,
++            scheduling_state,
+             has_import_errors,
+             dag_id_pattern,
+             dag_id_prefix_pattern,
+@@ -219,6 +222,17 @@ def get_dags(
+             session.execute(select(recent_runs_union).order_by(recent_runs_union.c.run_after.desc()))
+         )
+ 
++    unfinished_run_dag_ids = set(
++        session.scalars(
++            select(DagRun.dag_id)
++            .where(
++                DagRun.dag_id.in_([dag.dag_id for dag in dags]),
++                DagRun.state.in_((DagRunState.QUEUED, DagRunState.RUNNING)),
++            )
++            .distinct()
++        )
++    )
++
+     # Fetch pending HITL actions for each Dag if we are not certain whether some of the Dag might contain HITL actions
+     pending_actions_by_dag_id: dict[str, list[HITLDetail]] = {dag.dag_id: [] for dag in dags}
+     if has_pending_actions.value:
+@@ -269,6 +283,7 @@ def get_dags(
+                 "latest_dag_runs": [],
+                 "pending_actions": pending_actions_by_dag_id[dag.dag_id],
+                 "is_favorite": dag.dag_id in favorite_dag_ids,
++                "has_unfinished_runs": dag.dag_id in unfinished_run_dag_ids,
+                 "team_name": team_names_by_dag_id.get(dag.dag_id),
+             }
+         )
+diff --git a/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py b/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py
+index 483cbc009d..7c6e505f3a 100644
+--- a/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py
++++ b/airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py
+@@ -20,7 +20,7 @@ from decimal import ROUND_FLOOR, Context
+ from typing import TYPE_CHECKING, cast
+ 
+ from fastapi import Depends, status
+-from sqlalchemy import func, select
++from sqlalchemy import and_, func, select
+ from sqlalchemy.sql.expression import case, false
+ 
+ from airflow._shared.timezones import timezone
+@@ -152,7 +152,9 @@ def dag_stats(
+     )
+     dag_counts_query = (
+         select(
+-            func.coalesce(func.sum(case((DagModel.is_paused == false(), 1))), 0).label("active"),
++            func.coalesce(
++                func.sum(case((and_(DagModel.is_paused == false(), DagModel.is_draining == false()), 1))), 0
++            ).label("active"),
+             func.coalesce(func.sum(case((latest_state == DagRunState.FAILED, 1))), 0).label("failed"),
+         )
+         .select_from(DagModel)
+diff --git a/airflow-core/src/airflow/assets/manager.py b/airflow-core/src/airflow/assets/manager.py
+index a417ad96ea..7ed524af21 100644
+--- a/airflow-core/src/airflow/assets/manager.py
++++ b/airflow-core/src/airflow/assets/manager.py
+@@ -351,7 +351,9 @@ class AssetManager(LoggingMixin):
+         session.add(asset_event)
+         session.flush()
+ 
+-        dags_to_queue_from_asset = {ref.dag for ref in asset_model.scheduled_dags if not ref.dag.is_paused}
++        dags_to_queue_from_asset = {
++            ref.dag for ref in asset_model.scheduled_dags if not ref.dag.is_paused and not ref.dag.is_draining
++        }
+ 
+         dags_to_queue_from_asset_alias = set()
+         if source_alias_names:
+@@ -379,7 +381,7 @@ class AssetManager(LoggingMixin):
+                 dags_to_queue_from_asset_alias |= {
+                     alias_ref.dag
+                     for alias_ref in asset_alias_model.scheduled_dags
+-                    if not alias_ref.dag.is_paused
++                    if not alias_ref.dag.is_paused and not alias_ref.dag.is_draining
+                 }
+         else:
+             asset_alias_models = []
+@@ -395,6 +397,7 @@ class AssetManager(LoggingMixin):
+                         DagScheduleAssetUriReference.uri == asset.uri,
+                     ),
+                     DagModel.is_paused.is_(False),
++                    DagModel.is_draining.is_(False),
+                 )
+             )
+         )
+diff --git a/airflow-core/src/airflow/cli/commands/dag_command.py b/airflow-core/src/airflow/cli/commands/dag_command.py
+index a8ea2ccdd6..10e8e16bdd 100644
+--- a/airflow-core/src/airflow/cli/commands/dag_command.py
++++ b/airflow-core/src/airflow/cli/commands/dag_command.py
+@@ -30,7 +30,7 @@ import subprocess
+ import sys
+ from typing import TYPE_CHECKING, cast
+ 
+-from sqlalchemy import func, select
++from sqlalchemy import func, or_, select
+ 
+ from airflow._shared.timezones import timezone
+ from airflow.api.client import get_current_api_client
+@@ -59,7 +59,7 @@ from airflow.utils.helpers import ask_yesno, chunks
+ from airflow.utils.platform import getuser
+ from airflow.utils.providers_configuration_loader import providers_configuration_loaded
+ from airflow.utils.session import NEW_SESSION, create_session, provide_session
+-from airflow.utils.state import DagRunState, TaskInstanceState
++from airflow.utils.state import DagRunState, DagSchedulingState, TaskInstanceState
+ from airflow.utils.types import DagRunType
+ 
+ if TYPE_CHECKING:
+@@ -270,7 +270,10 @@ def set_is_paused(is_paused: bool, args, dag: DAG | None = None, *, session: Ses
+     else:
+         query = query.where(DagModel.dag_id == args.dag_id)
+ 
+-    query = query.where(DagModel.is_paused != is_paused)
++    if is_paused:
++        query = query.where(DagModel.is_paused.is_(False))
++    else:
++        query = query.where(or_(DagModel.is_paused.is_(True), DagModel.is_draining.is_(True)))
+ 
+     matched_dags = list(session.scalars(query).all())
+     if not matched_dags:
+@@ -290,7 +293,7 @@ def set_is_paused(is_paused: bool, args, dag: DAG | None = None, *, session: Ses
+ 
+     def _update_is_paused(dag_model: DagModel) -> bool:
+         old_is_paused = dag_model.is_paused
+-        dag_model.is_paused = is_paused
++        dag_model.set_scheduling_state(DagSchedulingState.PAUSED if is_paused else DagSchedulingState.ACTIVE)
+         return old_is_paused
+ 
+     old_values = [
+@@ -381,6 +384,7 @@ def _get_dagbag_dag_details(dag: DAG) -> dict:
+         "bundle_name": None,
+         "bundle_version": None,
+         "is_paused": None,
++        "scheduling_state": None,
+         "is_stale": None,
+         "last_parsed_time": None,
+         "last_parse_duration": None,
+diff --git a/airflow-core/src/airflow/jobs/scheduler_job_runner.py b/airflow-core/src/airflow/jobs/scheduler_job_runner.py
+index a082334f2a..54cee6a909 100644
+--- a/airflow-core/src/airflow/jobs/scheduler_job_runner.py
++++ b/airflow-core/src/airflow/jobs/scheduler_job_runner.py
+@@ -131,7 +131,7 @@ from airflow.utils.sqlalchemy import (
+     random_db_uuid,
+     with_row_locks,
+ )
+-from airflow.utils.state import CallbackState, DagRunState, State, TaskInstanceState
++from airflow.utils.state import CallbackState, DagRunState, DagSchedulingState, State, TaskInstanceState
+ from airflow.utils.types import DagRunTriggeredByType, DagRunType
+ 
+ if TYPE_CHECKING:
+@@ -1761,6 +1761,46 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
+             self.log.info("Exited execute loop")
+         return None
+ 
++    @provide_session
++    def _finalize_draining_dags(self, session: Session = NEW_SESSION) -> None:
++        """Pause draining Dags that have no unfinished run and no backfill awaiting its runs."""
++        has_unfinished_run = exists().where(
++            DagRun.dag_id == DagModel.dag_id,
++            DagRun.state.in_((DagRunState.QUEUED, DagRunState.RUNNING)),
++        )
++        has_uninitialized_backfill = exists().where(
++            Backfill.dag_id == DagModel.dag_id,
++            Backfill.completed_at.is_(None),
++            ~exists().where(BackfillDagRun.backfill_id == Backfill.id),
++        )
++        drained_dags = session.scalars(
++            with_row_locks(
++                select(DagModel)
++                .where(
++                    DagModel.is_draining == expression.true(),
++                    ~has_unfinished_run,
++                    ~has_uninitialized_backfill,
++                )
++                .order_by(DagModel.dag_id)
++                .limit(DagModel.NUM_DAGS_PER_DAGRUN_QUERY),
++                of=DagModel,
++                session=session,
++                skip_locked=True,
++            )
++        ).all()
++        for dag_model in drained_dags:
++            self.log.info("Drain of Dag %s completed, pausing it", dag_model.dag_id)
++            dag_model.set_scheduling_state(DagSchedulingState.PAUSED)
++            session.add(
++                Log(
++                    event="drain_completed",
++                    dag_id=dag_model.dag_id,
++                    owner="scheduler",
++                    owner_display_name="Scheduler",
++                    extra=f"[('dag_id', '{dag_model.dag_id}'), ('scheduling_state', 'paused')]",
++                )
++            )
++
+     @provide_session
+     def _update_dag_run_state_for_paused_dags(self, *, session: Session = NEW_SESSION) -> None:
+         try:
+@@ -1855,6 +1895,8 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
+ 
+         timers.call_regular_interval(60.0, self._update_dag_run_state_for_paused_dags)
+ 
++        timers.call_regular_interval(5.0, self._finalize_draining_dags)
++
+         timers.call_regular_interval(
+             conf.getfloat("scheduler", "task_queued_timeout_check_interval"),
+             self._handle_tasks_stuck_in_queued,
+@@ -2282,6 +2324,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
+                 .where(
+                     AssetPartitionDagRun.created_dag_run_id.is_(None),
+                     DagModel.is_stale.is_(False),
++                    DagModel.is_draining.is_(False),
+                 )
+                 .order_by(AssetPartitionDagRun.created_at, AssetPartitionDagRun.id)
+                 .limit(self._max_partition_dag_runs_per_loop),
+diff --git a/airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py b/airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py
+new file mode 100644
+index 0000000000..ae1a57b317
+--- /dev/null
++++ b/airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py
+@@ -0,0 +1,64 @@
++#
++# Licensed to the Apache Software Foundation (ASF) under one
++# or more contributor license agreements.  See the NOTICE file
++# distributed with this work for additional information
++# regarding copyright ownership.  The ASF licenses this file
++# to you under the Apache License, Version 2.0 (the
++# "License"); you may not use this file except in compliance
++# with the License.  You may obtain a copy of the License at
++#
++#   http://www.apache.org/licenses/LICENSE-2.0
++#
++# Unless required by applicable law or agreed to in writing,
++# software distributed under the License is distributed on an
++# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
++# KIND, either express or implied.  See the License for the
++# specific language governing permissions and limitations
++# under the License.
++
++"""
++Add is_draining to dag and an index on backfill (dag_id, completed_at).
++
++Revision ID: c4d9e7a3b165
++Revises: f8c2a1d94e03
++Create Date: 2026-07-20 02:00:00.000000
++
++"""
++
++from __future__ import annotations
++
++import sqlalchemy as sa
++from alembic import op
++
++# revision identifiers, used by Alembic.
++revision = "c4d9e7a3b165"
++down_revision = "f8c2a1d94e03"
++branch_labels = None
++depends_on = None
++airflow_version = "3.4.0"
++
++
++def upgrade():
++    """Add dag.is_draining and backfill (dag_id, completed_at) index."""
++    with op.batch_alter_table("dag", schema=None) as batch_op:
++        batch_op.add_column(
++            sa.Column("is_draining", sa.Boolean(), server_default="0", nullable=False),
++        )
++        batch_op.create_index("idx_dag_is_draining", ["is_draining"], unique=False)
++        batch_op.create_check_constraint(
++            batch_op.f("ck_dag_not_paused_and_draining"), "NOT (is_paused AND is_draining)"
++        )
++
++    with op.batch_alter_table("backfill", schema=None) as batch_op:
++        batch_op.create_index("idx_backfill_dag_id_completed_at", ["dag_id", "completed_at"], unique=False)
++
++
++def downgrade():
++    """Remove dag.is_draining and backfill (dag_id, completed_at) index."""
++    with op.batch_alter_table("backfill", schema=None) as batch_op:
++        batch_op.drop_index("idx_backfill_dag_id_completed_at")
++
++    with op.batch_alter_table("dag", schema=None) as batch_op:
++        batch_op.drop_constraint(batch_op.f("ck_dag_not_paused_and_draining"), type_="check")
++        batch_op.drop_index("idx_dag_is_draining")
++        batch_op.drop_column("is_draining")
+diff --git a/airflow-core/src/airflow/models/backfill.py b/airflow-core/src/airflow/models/backfill.py
+index 203be25188..b6a3c2d423 100644
+--- a/airflow-core/src/airflow/models/backfill.py
++++ b/airflow-core/src/airflow/models/backfill.py
+@@ -33,6 +33,7 @@ import structlog
+ from sqlalchemy import (
+     Boolean,
+     ForeignKeyConstraint,
++    Index,
+     Integer,
+     String,
+     UniqueConstraint,
+@@ -197,6 +198,8 @@ class Backfill(Base):
+         foreign_keys=[dag_id],
+     )
+ 
++    __table_args__ = (Index("idx_backfill_dag_id_completed_at", dag_id, completed_at),)
++
+     def __repr__(self):
+         return f"Backfill({self.dag_id=}, {self.from_date=}, {self.to_date=})"
+ 
+diff --git a/airflow-core/src/airflow/models/dag.py b/airflow-core/src/airflow/models/dag.py
+index 4c8d4d3e68..697318dba1 100644
+--- a/airflow-core/src/airflow/models/dag.py
++++ b/airflow-core/src/airflow/models/dag.py
+@@ -30,6 +30,7 @@ from cachetools import TTLCache, cached
+ from dateutil.relativedelta import relativedelta
+ from sqlalchemy import (
+     Boolean,
++    CheckConstraint,
+     Float,
+     ForeignKey,
+     Index,
+@@ -73,7 +74,7 @@ from airflow.timetables.interval import CronDataIntervalTimetable, DeltaDataInte
+ from airflow.timetables.simple import AssetTriggeredTimetable, NullTimetable, OnceTimetable
+ from airflow.utils.session import NEW_SESSION, provide_session
+ from airflow.utils.sqlalchemy import UtcDateTime, with_row_locks
+-from airflow.utils.state import DagRunState
++from airflow.utils.state import DagRunState, DagSchedulingState
+ from airflow.utils.types import DagRunType
+ 
+ if TYPE_CHECKING:
+@@ -321,6 +322,8 @@ class DagModel(Base):
+     # Set this default value of is_paused based on a configuration value!
+     is_paused_at_creation = airflow_conf.getboolean("core", "dags_are_paused_at_creation")
+     is_paused: Mapped[bool] = mapped_column(Boolean, default=is_paused_at_creation)
++    # Transient "drain, then pause" mode; the scheduler clears it when the Dag becomes paused
++    is_draining: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+     # Whether that DAG was seen on the last DagBag load
+     is_stale: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+     exceeds_max_non_backfill: Mapped[bool] = mapped_column(
+@@ -405,7 +408,11 @@ class DagModel(Base):
+     # Earliest time at which this ``next_dagrun`` can be created.
+     next_dagrun_create_after: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+ 
+-    __table_args__ = (Index("idx_next_dagrun_create_after", next_dagrun_create_after, unique=False),)
++    __table_args__ = (
++        Index("idx_next_dagrun_create_after", next_dagrun_create_after, unique=False),
++        Index("idx_dag_is_draining", is_draining),
++        CheckConstraint("NOT (is_paused AND is_draining)", name="not_paused_and_draining"),
++    )
+ 
+     schedule_asset_references = relationship(
+         "DagScheduleAssetReference",
+@@ -601,6 +608,19 @@ class DagModel(Base):
+ 
+         return set(paused_dag_ids)
+ 
++    @property
++    def scheduling_state(self) -> DagSchedulingState:
++        if self.is_draining:
++            return DagSchedulingState.DRAINING
++        if self.is_paused:
++            return DagSchedulingState.PAUSED
++        return DagSchedulingState.ACTIVE
++
++    def set_scheduling_state(self, state: DagSchedulingState | str) -> None:
++        state = DagSchedulingState(state)
++        self.is_paused = state == DagSchedulingState.PAUSED
++        self.is_draining = state == DagSchedulingState.DRAINING
++
+     @property
+     def safe_dag_id(self):
+         return self.dag_id.replace(".", "__dot__")
+@@ -774,6 +794,7 @@ class DagModel(Base):
+             select(cls)
+             .where(
+                 cls.is_paused == expression.false(),
++                cls.is_draining == expression.false(),
+                 cls.is_stale == expression.false(),
+                 cls.has_import_errors == expression.false(),
+                 cls.exceeds_max_non_backfill == expression.false(),
+diff --git a/airflow-core/src/airflow/models/dagrun.py b/airflow-core/src/airflow/models/dagrun.py
+index 725bf09c77..28251b6a01 100644
+--- a/airflow-core/src/airflow/models/dagrun.py
++++ b/airflow-core/src/airflow/models/dagrun.py
+@@ -1026,7 +1026,7 @@ class DagRun(Base, LoggingMixin):
+             session.execute(
+                 update(DagModel)
+                 .where(or_(*filter_query))
+-                .values(is_paused=True)
++                .values(is_paused=True, is_draining=False)
+                 .execution_options(synchronize_session="fetch")
+             )
+             session.add(
+diff --git a/airflow-core/src/airflow/utils/db.py b/airflow-core/src/airflow/utils/db.py
+index f0779c9969..35ce16eb4b 100644
+--- a/airflow-core/src/airflow/utils/db.py
++++ b/airflow-core/src/airflow/utils/db.py
+@@ -117,7 +117,7 @@ _REVISION_HEADS_MAP: dict[str, str] = {
+     "3.1.8": "509b94a1042d",
+     "3.2.0": "1d6611b6ab7c",
+     "3.3.0": "d2f4e1b3c5a7",
+-    "3.4.0": "f8c2a1d94e03",
++    "3.4.0": "c4d9e7a3b165",
+ }
+ 
+ # Prefix used to identify tables holding data moved during migration.
+diff --git a/airflow-core/src/airflow/utils/state.py b/airflow-core/src/airflow/utils/state.py
+index 89c8efcaa3..92a6d70cc4 100644
+--- a/airflow-core/src/airflow/utils/state.py
++++ b/airflow-core/src/airflow/utils/state.py
+@@ -94,6 +94,22 @@ class TaskInstanceState(str, Enum):
+         return self.value
+ 
+ 
++class DagSchedulingState(str, Enum):
++    """
++    Scheduling state of a Dag.
++
++    ``draining`` is transient: the scheduler stops creating new runs and moves the Dag to ``paused``
++    once its in-flight work has finished.
++    """
++
++    ACTIVE = "active"
++    DRAINING = "draining"
++    PAUSED = "paused"
++
++    def __str__(self) -> str:
++        return self.value
++
++
+ class DagRunState(str, Enum):
+     """
+     All possible states that a DagRun can be in.
+diff --git a/airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py b/airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py
+index 9536a1719e..fd54f49f5e 100644
+--- a/airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py
++++ b/airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py
+@@ -19,12 +19,15 @@ from __future__ import annotations
+ from datetime import datetime, timedelta, timezone
+ 
+ import pytest
++from pydantic import ValidationError
+ 
+ from airflow._shared.module_loading import qualname
+ from airflow.api_fastapi.core_api.datamodels.dags import (
+     DAGDetailsResponse,
++    DAGPatchBody,
+     DAGResponse,
+ )
++from airflow.utils.state import DagSchedulingState
+ from airflow.utils.types import DagRunType
+ 
+ 
+@@ -174,3 +177,36 @@ class TestIsBackfillable:
+             allowed_run_types=[DagRunType.BACKFILL_JOB, DagRunType.MANUAL],
+         )
+         assert dag.is_backfillable is False
++
++
++class TestSchedulingState:
++    def test_response_defaults_to_active(self):
++        assert _make_dag_response().scheduling_state == DagSchedulingState.ACTIVE
++
++    def test_response_reflects_value(self):
++        assert _make_dag_response(scheduling_state="draining").scheduling_state == "draining"
++
++    @pytest.mark.parametrize(
++        "body",
++        [
++            {"is_paused": True},
++            {"is_paused": False, "scheduling_state": None},
++            {"scheduling_state": "draining"},
++            {"is_paused": None, "scheduling_state": "paused"},
++        ],
++    )
++    def test_patch_body_accepts_exactly_one_field(self, body):
++        assert DAGPatchBody.model_validate(body)
++
++    @pytest.mark.parametrize(
++        "body",
++        [
++            {},
++            {"is_paused": None},
++            {"is_paused": None, "scheduling_state": None},
++            {"is_paused": True, "scheduling_state": "draining"},
++        ],
++    )
++    def test_patch_body_rejects_other_combinations(self, body):
++        with pytest.raises(ValidationError):
++            DAGPatchBody.model_validate(body)
+diff --git a/airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py b/airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py
+index b37ccf1a13..c4c13e30b7 100644
+--- a/airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py
++++ b/airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py
+@@ -939,6 +939,71 @@ class TestPatchDag(TestDagEndpoint):
+                 assert tag["dag_id"] == dag_id
+                 assert tag["dag_display_name"] == expected_display_name
+ 
++    @pytest.mark.parametrize(
++        ("initial_state", "body", "params", "expected_paused", "expected_draining", "expected_state"),
++        [
++            ("active", {"scheduling_state": "draining"}, {}, False, True, "draining"),
++            ("active", {"scheduling_state": "paused", "is_paused": None}, {}, True, False, "paused"),
++            ("paused", {"scheduling_state": "active"}, {}, False, False, "active"),
++            ("draining", {"is_paused": True, "scheduling_state": None}, {}, True, False, "paused"),
++            ("draining", {"is_paused": False}, {}, False, False, "active"),
++            (
++                "active",
++                {"scheduling_state": "draining"},
++                {"update_mask": ["scheduling_state"]},
++                False,
++                True,
++                "draining",
++            ),
++            ("active", {"is_paused": True}, {"update_mask": ["is_paused"]}, True, False, "paused"),
++        ],
++    )
++    def test_patch_dag_scheduling_state(
++        self,
++        test_client,
++        session,
++        initial_state,
++        body,
++        params,
++        expected_paused,
++        expected_draining,
++        expected_state,
++    ):
++        session.get(DagModel, DAG1_ID).set_scheduling_state(initial_state)
++        session.commit()
++
++        response = test_client.patch(f"/dags/{DAG1_ID}", json=body, params=params)
++
++        assert response.status_code == 200
++        assert response.json()["is_paused"] is expected_paused
++        assert response.json()["scheduling_state"] == expected_state
++        session.expire_all()
++        dag_model = session.get(DagModel, DAG1_ID)
++        assert (dag_model.is_paused, dag_model.is_draining) == (expected_paused, expected_draining)
++
++    @pytest.mark.parametrize(
++        ("body", "params", "expected_status_code"),
++        [
++            ({"is_paused": True, "scheduling_state": "draining"}, {}, 422),
++            ({"is_paused": None, "scheduling_state": None}, {}, 422),
++            ({"is_paused": None}, {}, 422),
++            ({}, {}, 422),
++            ({"scheduling_state": "unknown"}, {}, 422),
++            ({"scheduling_state": "draining"}, {"update_mask": ["is_paused"]}, 422),
++            ({"is_paused": True}, {"update_mask": ["scheduling_state"]}, 422),
++            ({"is_paused": True}, {"update_mask": ["is_paused", "scheduling_state"]}, 400),
++            ({"is_paused": True}, {"update_mask": ["field_1"]}, 400),
++        ],
++    )
++    def test_patch_dag_scheduling_state_invalid_body(
++        self, test_client, session, body, params, expected_status_code
++    ):
++        response = test_client.patch(f"/dags/{DAG1_ID}", json=body, params=params)
++
++        assert response.status_code == expected_status_code
++        session.expire_all()
++        assert session.get(DagModel, DAG1_ID).is_paused is False
++
+     def test_patch_dag_should_response_401(self, unauthenticated_test_client):
+         response = unauthenticated_test_client.patch(f"/dags/{DAG1_ID}", json={"is_paused": True})
+         assert response.status_code == 401
+@@ -1027,6 +1092,52 @@ class TestPatchDags(TestDagEndpoint):
+             assert paused_dag_ids == set(expected_paused_ids)
+             check_last_log(session, dag_id=None, event="patch_dags", logical_date=None)
+ 
++    @pytest.mark.parametrize(
++        ("body", "params", "expected_state"),
++        [
++            ({"scheduling_state": "draining"}, {}, "draining"),
++            (
++                {"scheduling_state": "paused", "is_paused": None},
++                {"update_mask": ["scheduling_state"]},
++                "paused",
++            ),
++            ({"scheduling_state": "active"}, {}, "active"),
++            ({"is_paused": True}, {}, "paused"),
++            ({"is_paused": False}, {"update_mask": ["is_paused"]}, "active"),
++        ],
++    )
++    def test_patch_dags_scheduling_state(self, test_client, session, body, params, expected_state):
++        for dag_id, state in ((DAG1_ID, "draining"), (DAG2_ID, "paused")):
++            session.get(DagModel, dag_id).set_scheduling_state(state)
++        session.commit()
++
++        response = test_client.patch("/dags", json=body, params={"dag_id_pattern": "~", **params})
++
++        assert response.status_code == 200
++        assert {dag["scheduling_state"] for dag in response.json()["dags"]} == {expected_state}
++        session.expire_all()
++        for dag_id in (DAG1_ID, DAG2_ID):
++            assert session.get(DagModel, dag_id).scheduling_state == expected_state
++
++    @pytest.mark.parametrize(
++        ("body", "params", "expected_status_code"),
++        [
++            ({"is_paused": True, "scheduling_state": "draining"}, {}, 422),
++            ({"is_paused": None, "scheduling_state": None}, {}, 422),
++            ({"scheduling_state": "draining"}, {"update_mask": ["is_paused"]}, 422),
++            ({"is_paused": True}, {"update_mask": ["scheduling_state"]}, 422),
++            ({"is_paused": True}, {"update_mask": ["field_1"]}, 400),
++        ],
++    )
++    def test_patch_dags_scheduling_state_invalid_body(
++        self, test_client, session, body, params, expected_status_code
++    ):
++        response = test_client.patch("/dags", json=body, params={"dag_id_pattern": "~", **params})
++
++        assert response.status_code == expected_status_code
++        session.expire_all()
++        assert session.get(DagModel, DAG1_ID).is_paused is False
++
+     @pytest.mark.parametrize(
+         ("tags_to_add", "query_params", "body", "expected_ids", "expected_paused_ids"),
+         [
+@@ -1268,6 +1379,7 @@ class TestDagDetails(TestDagEndpoint):
+             "is_backfillable": False,
+             "is_favorite": False,
+             "is_paused": False,
++            "scheduling_state": "active",
+             "is_paused_upon_creation": None,
+             "is_stale": False,
+             "latest_dag_version": {
+@@ -1493,6 +1605,7 @@ class TestGetDag(TestDagEndpoint):
+             "has_task_concurrency_limits": True,
+             "is_backfillable": False,
+             "is_paused": False,
++            "scheduling_state": "active",
+             "is_stale": False,
+             "last_expired": None,
+             "last_parse_duration": last_parse_duration,
+diff --git a/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py b/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py
+index 33f4a5441d..9b20d863b8 100644
+--- a/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py
++++ b/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py
+@@ -149,6 +149,61 @@ class TestGetDagRuns(TestPublicDagEndpoint):
+         assert response.status_code == 200
+         assert [dag["dag_id"] for dag in response.json()["dags"]] == expected_ids
+ 
++    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
++    @pytest.mark.parametrize(
++        ("query_params", "expected_ids"),
++        [
++            ({"scheduling_state": "active"}, [DAG1_ID]),
++            ({"scheduling_state": "draining"}, [DAG2_ID]),
++            ({"scheduling_state": "paused"}, [DAG3_ID]),
++            ({"paused": False}, [DAG1_ID, DAG2_ID]),
++            ({"paused": True}, [DAG3_ID]),
++        ],
++    )
++    def test_scheduling_state_filter(self, test_client, session, query_params, expected_ids):
++        for dag_id, state in ((DAG1_ID, "active"), (DAG2_ID, "draining"), (DAG3_ID, "paused")):
++            session.get(DagModel, dag_id).set_scheduling_state(state)
++        session.commit()
++
++        response = test_client.get(
++            "/dags", params={"dag_ids": [DAG1_ID, DAG2_ID, DAG3_ID], "exclude_stale": False, **query_params}
++        )
++
++        assert response.status_code == 200
++        assert [dag["dag_id"] for dag in response.json()["dags"]] == expected_ids
++        assert {dag["dag_id"]: dag["scheduling_state"] for dag in response.json()["dags"]} == {
++            dag_id: session.get(DagModel, dag_id).scheduling_state for dag_id in expected_ids
++        }
++
++    @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
++    def test_has_unfinished_runs_ignores_dag_runs_limit(self, test_client, session):
++        for run in session.scalars(select(DagRun).where(DagRun.dag_id.in_([DAG1_ID, DAG2_ID]))):
++            run.state = DagRunState.SUCCESS
++        session.scalar(
++            select(DagRun).where(DagRun.dag_id == DAG1_ID, DagRun.run_id == "run_id_1")
++        ).state = DagRunState.QUEUED
++        session.scalar(
++            select(DagRun).where(DagRun.dag_id == DAG2_ID, DagRun.run_id == "run_id_1")
++        ).state = DagRunState.RUNNING
++        session.scalar(
++            select(DagRun).where(DagRun.dag_id == DAG2_ID, DagRun.run_id == "run_id_2")
++        ).state = DagRunState.FAILED
++        session.commit()
++
++        response = test_client.get(
++            "/dags",
++            params={"dag_ids": [DAG1_ID, DAG2_ID, DAG3_ID], "exclude_stale": False, "dag_runs_limit": 1},
++        )
++
++        assert response.status_code == 200
++        dags = {dag["dag_id"]: dag for dag in response.json()["dags"]}
++        assert {dag_id: dag["has_unfinished_runs"] for dag_id, dag in dags.items()} == {
++            DAG1_ID: True,
++            DAG2_ID: True,
++            DAG3_ID: False,
++        }
++        assert all(len(dag["latest_dag_runs"]) == 1 for dag in dags.values())
++
+     @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
+     @pytest.mark.parametrize("state", ["queued", "running", "failed", "success"])
+     def test_dag_run_state_matches_any_run_not_only_latest(self, test_client, session, state):
+diff --git a/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py b/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py
+index 6ed4eada4b..973bc1535a 100644
+--- a/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py
++++ b/airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py
+@@ -392,6 +392,16 @@ class TestDagStatsEndpoint:
+             "queued_dag_count": 1,
+         }
+ 
++    @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_dag_runs")
++    def test_active_dag_count_excludes_draining_dags(self, test_client, session):
++        session.get(DagModel, "test_dag_id").set_scheduling_state("draining")
++        session.commit()
++
++        response = test_client.get("/dashboard/dag_stats")
++
++        assert response.status_code == 200
++        assert response.json()["active_dag_count"] == 0
++
+     @pytest.mark.usefixtures("freeze_time_for_dagruns", "make_failed_dag_runs")
+     def test_should_response_200_failed_dag(self, test_client):
+         with assert_queries_count(3):
+diff --git a/airflow-core/tests/unit/assets/test_manager.py b/airflow-core/tests/unit/assets/test_manager.py
+index 3d9d75ff12..c86f35d327 100644
+--- a/airflow-core/tests/unit/assets/test_manager.py
++++ b/airflow-core/tests/unit/assets/test_manager.py
+@@ -40,7 +40,9 @@ from airflow.models.asset import (
+     AssetModel,
+     AssetPartitionDagRun,
+     DagScheduleAssetAliasReference,
++    DagScheduleAssetNameReference,
+     DagScheduleAssetReference,
++    DagScheduleAssetUriReference,
+ )
+ from airflow.models.dag import DAG, DagModel
+ from airflow.models.dagbundle import DagBundleModel
+@@ -190,6 +192,54 @@ class TestAssetManager:
+         )
+         assert session.scalar(select(func.count()).select_from(AssetDagRunQueue)) == 2
+ 
++    @pytest.fixture
++    def clean_dags(self):
++        from tests_common.test_utils.db import clear_db_dags
++
++        clear_db_dags()
++        yield
++        clear_db_dags()
++
++    @pytest.mark.usefixtures("clean_dags")
++    @pytest.mark.parametrize("reference", ["direct", "alias", "name", "uri"])
++    def test_register_asset_change_skips_draining_dag(
++        self, session, mock_task_instance, testing_dag_bundle, reference
++    ):
++        active_dag = DagModel(dag_id="active_dag", bundle_name="testing", is_stale=False, is_paused=False)
++        draining_dag = DagModel(dag_id="draining_dag", bundle_name="testing", is_stale=False)
++        draining_dag.set_scheduling_state("draining")
++        session.add_all([active_dag, draining_dag])
++        asm = AssetModel(uri="test://asset1/", name="test_asset_uri", group="asset")
++        asam = AssetAliasModel(name="test_alias_name", group="test")
++        session.add_all([asm, asam])
++        session.flush()
++        for dag in (active_dag, draining_dag):
++            if reference == "direct":
++                asm.scheduled_dags.append(DagScheduleAssetReference(dag_id=dag.dag_id))
++            elif reference == "alias":
++                asam.scheduled_dags.append(
++                    DagScheduleAssetAliasReference(alias_id=asam.id, dag_id=dag.dag_id)
++                )
++            elif reference == "name":
++                session.add(DagScheduleAssetNameReference(name=asm.name, dag_id=dag.dag_id))
++            else:
++                session.add(DagScheduleAssetUriReference(uri=asm.uri, dag_id=dag.dag_id))
++        session.flush()
++
++        AssetManager().register_asset_change(
++            task_instance=mock_task_instance,
++            asset=Asset(uri="test://asset1", name="test_asset_uri"),
++            source_alias_names=["test_alias_name"] if reference == "alias" else (),
++            session=session,
++        )
++        session.flush()
++
++        assert (
++            session.scalar(select(func.count()).select_from(AssetEvent).where(AssetEvent.asset_id == asm.id))
++            == 1
++        )
++        assert session.scalars(select(AssetDagRunQueue.target_dag_id)).all() == ["active_dag"]
++
+     def test_register_asset_change_no_downstreams(self, session, mock_task_instance):
+         asset_manager = AssetManager()
+ 
+diff --git a/airflow-core/tests/unit/cli/commands/test_dag_command.py b/airflow-core/tests/unit/cli/commands/test_dag_command.py
+index db7bf2d14a..7b9938a25c 100644
+--- a/airflow-core/tests/unit/cli/commands/test_dag_command.py
++++ b/airflow-core/tests/unit/cli/commands/test_dag_command.py
+@@ -643,6 +643,36 @@ class TestCliDags:
+         out = temp_stdout.splitlines()[-1]
+         assert out == "No paused DAGs were found"
+ 
++    @pytest.fixture
++    def restore_scheduling_state(self):
++        yield
++        with create_session() as session:
++            for dag_id in ("example_bash_operator", "example_complex"):
++                session.get(DagModel, dag_id).set_scheduling_state("active")
++
++    @pytest.mark.parametrize(
++        ("command", "expected_state"),
++        [(dag_command.dag_pause, "paused"), (dag_command.dag_unpause, "active")],
++    )
++    def test_pause_unpause_draining_dag(self, command, expected_state, restore_scheduling_state):
++        with create_session() as session:
++            session.get(DagModel, "example_bash_operator").set_scheduling_state("draining")
++
++        command(self.parser.parse_args(["dags", "pause", "example_bash_operator"]))
++
++        dag_model = DagModel.get_dagmodel("example_bash_operator")
++        assert dag_model.scheduling_state == expected_state
++        assert dag_model.is_draining is False
++
++    def test_cli_get_dag_details_scheduling_state(self, stdout_capture, restore_scheduling_state):
++        with create_session() as session:
++            session.get(DagModel, "example_complex").set_scheduling_state("draining")
++        args = self.parser.parse_args(["dags", "details", "example_complex", "--output", "json"])
++        with stdout_capture as temp_stdout:
++            dag_command.dag_details(args)
++
++        assert json.loads(temp_stdout.getvalue())[0]["scheduling_state"] == "draining"
++
+     def test_pausing_already_paused_dag_do_not_error(self, stdout_capture):
+         args = self.parser.parse_args(["dags", "pause", "example_bash_operator", "--yes"])
+         with stdout_capture as temp_stdout:
+diff --git a/airflow-core/tests/unit/jobs/test_scheduler_job.py b/airflow-core/tests/unit/jobs/test_scheduler_job.py
+index d9ce14a35e..ec34e69436 100644
+--- a/airflow-core/tests/unit/jobs/test_scheduler_job.py
++++ b/airflow-core/tests/unit/jobs/test_scheduler_job.py
+@@ -1351,6 +1351,132 @@ class TestSchedulerJob:
+         assert ti1.state == TaskInstanceState.QUEUED
+         session.rollback()
+ 
++    @pytest.mark.parametrize(
++        ("scheduling_state", "expected_ti_state"),
++        [
++            ("active", TaskInstanceState.QUEUED),
++            ("draining", TaskInstanceState.QUEUED),
++            ("paused", TaskInstanceState.SCHEDULED),
++        ],
++    )
++    def test_enqueue_task_instances_follows_scheduling_state(
++        self, dag_maker, session, scheduling_state, expected_ti_state
++    ):
++        with dag_maker(dag_id="draining_enqueue_dag", session=session):
++            EmptyOperator(task_id="dummy_task")
++        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
++        dr = dag_maker.create_dagrun(run_type=DagRunType.SCHEDULED)
++        (ti,) = dr.task_instances
++        ti.state = TaskInstanceState.SCHEDULED
++        session.get(DagModel, dr.dag_id).set_scheduling_state(scheduling_state)
++        session.flush()
++
++        self.job_runner._critical_section_enqueue_task_instances(session)
++        session.flush()
++
++        assert dr.get_task_instance("dummy_task", session=session).state == expected_ti_state
++
++    @pytest.mark.parametrize(
++        ("run_state", "backfill", "expected_state"),
++        [
++            (None, None, "paused"),
++            (DagRunState.QUEUED, None, "draining"),
++            (DagRunState.RUNNING, None, "draining"),
++            (DagRunState.SUCCESS, None, "paused"),
++            (DagRunState.FAILED, None, "paused"),
++            (None, "uninitialized", "draining"),
++            (None, "completed", "paused"),
++            (DagRunState.SUCCESS, "initialized", "paused"),
++        ],
++    )
++    def test_finalize_draining_dags(self, dag_maker, session, run_state, backfill, expected_state):
++        clear_db_backfills()
++        with dag_maker(dag_id="draining_dag", session=session):
++            EmptyOperator(task_id="dummy_task")
++        session.get(DagModel, "draining_dag").set_scheduling_state("draining")
++        if run_state:
++            dr = dag_maker.create_dagrun(run_type=DagRunType.SCHEDULED, state=run_state)
++        if backfill:
++            bf = Backfill(
++                dag_id="draining_dag",
++                from_date=timezone.datetime(2021, 1, 1),
++                to_date=timezone.datetime(2021, 1, 2),
++                completed_at=timezone.utcnow() if backfill == "completed" else None,
++            )
++            session.add(bf)
++            session.flush()
++            if backfill == "initialized":
++                session.add(
++                    BackfillDagRun(
++                        backfill_id=bf.id,
++                        dag_run_id=dr.id,
++                        logical_date=dr.logical_date,
++                        sort_ordinal=1,
++                    )
++                )
++        session.flush()
++        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
++
++        self.job_runner._finalize_draining_dags(session)
++        session.flush()
++
++        dag_model = session.get(DagModel, "draining_dag")
++        assert dag_model.scheduling_state == expected_state
++        logs = session.scalars(select(Log).where(Log.event == "drain_completed")).all()
++        if expected_state == "paused":
++            assert [(log.dag_id, log.owner) for log in logs] == [("draining_dag", "scheduler")]
++        else:
++            assert logs == []
++
++    def test_finalize_draining_dags_ignores_active_and_paused_dags(self, dag_maker, session):
++        for dag_id, state in (("active_dag", "active"), ("paused_dag", "paused")):
++            with dag_maker(dag_id=dag_id, session=session):
++                EmptyOperator(task_id="dummy_task")
++            session.get(DagModel, dag_id).set_scheduling_state(state)
++        session.flush()
++        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
++
++        self.job_runner._finalize_draining_dags(session)
++
++        assert session.scalars(select(Log).where(Log.event == "drain_completed")).all() == []
++        assert session.get(DagModel, "active_dag").scheduling_state == "active"
++
++    @mock.patch.object(DagModel, "NUM_DAGS_PER_DAGRUN_QUERY", 2)
++    def test_finalize_draining_dags_processes_in_dag_id_order_with_limit(self, dag_maker, session):
++        for dag_id in ("dag_c", "dag_a", "dag_b"):
++            with dag_maker(dag_id=dag_id, session=session):
++                EmptyOperator(task_id="dummy_task")
++            session.get(DagModel, dag_id).set_scheduling_state("draining")
++        session.flush()
++        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
++
++        self.job_runner._finalize_draining_dags(session)
++
++        states = {
++            dag_id: session.get(DagModel, dag_id).scheduling_state for dag_id in ("dag_a", "dag_b", "dag_c")
++        }
++        assert states == {"dag_a": "paused", "dag_b": "paused", "dag_c": "draining"}
++
++    @mock.patch("airflow.jobs.scheduler_job_runner.with_row_locks", autospec=True)
++    def test_finalize_draining_dags_locks_rows(self, mock_with_row_locks, session):
++        mock_with_row_locks.side_effect = lambda query, **kwargs: query
++        self.job_runner = SchedulerJobRunner(Job(), executors=[self.null_exec])
++
++        self.job_runner._finalize_draining_dags(session)
++
++        assert mock_with_row_locks.call_args.kwargs["of"] is DagModel
++        assert mock_with_row_locks.call_args.kwargs["skip_locked"] is True
++
++    @mock.patch("airflow.jobs.scheduler_job_runner.EventScheduler", autospec=True)
++    def test_scheduler_loop_registers_finalize_draining_dags(self, mock_event_scheduler, mock_executors):
++        self.job_runner = SchedulerJobRunner(Job(), num_runs=1)
++
++        self.job_runner._execute()
++
++        mock_event_scheduler.return_value.call_regular_interval.assert_any_call(
++            5.0, self.job_runner._finalize_draining_dags
++        )
++
+     def test_setup_callback_sink_standalone_dag_processor(self, mock_executors):
+         scheduler_job = Job()
+         self.job_runner = SchedulerJobRunner(job=scheduler_job, num_runs=1)
+@@ -11180,6 +11306,27 @@ def test_mark_backfills_completed(dag_maker, session):
+     assert b.completed_at.timestamp() > 0
+ 
+ 
++def test_backfill_can_be_created_for_draining_dag(dag_maker, session):
++    clear_db_backfills()
++    with dag_maker(serialized=True, dag_id="test_backfill_draining", schedule="@daily") as dag:
++        EmptyOperator(task_id="hi")
++    session.get(DagModel, dag.dag_id).set_scheduling_state("draining")
++    session.commit()
++
++    _create_backfill(
++        dag_id=dag.dag_id,
++        from_date=pendulum.parse("2021-01-01"),
++        to_date=pendulum.parse("2021-01-03"),
++        max_active_runs=10,
++        reverse=False,
++        triggering_user_name="test_user",
++        dag_run_conf={},
++    )
++
++    assert session.scalar(select(func.count()).select_from(DagRun).where(DagRun.dag_id == dag.dag_id)) == 3
++    assert session.get(DagModel, dag.dag_id).scheduling_state == "draining"
++
++
+ def test_mark_backfills_complete_skips_initializing_backfill(dag_maker, session):
+     clear_db_backfills()
+     dag_id = "test_backfill_race_lifecycle"
+@@ -14092,3 +14239,36 @@ class TestSchedulerObservabilityMetrics:
+             self.job_runner._find_and_purge_task_instances_without_heartbeats()
+ 
+         mock_stats.incr.assert_not_called()
++
++
++@pytest.mark.need_serialized_dag
++@pytest.mark.usefixtures("clear_asset_partition_rows")
++def test_draining_dag_gets_no_partitioned_asset_dag_run(dag_maker: DagMaker, session: Session):
++    asset_1 = Asset(name="asset-1")
++    with dag_maker(
++        dag_id="asset-event-consumer",
++        schedule=PartitionedAssetTimetable(assets=asset_1, default_partition_mapper=IdentityMapper()),
++        session=session,
++    ):
++        EmptyOperator(task_id="hi")
++    runner = SchedulerJobRunner(
++        job=Job(job_type=SchedulerJobRunner.job_type), executors=[MockExecutor(do_update=False)]
++    )
++    apdr = _produce_and_register_asset_event(
++        dag_id="asset-event-producer",
++        asset=asset_1,
++        partition_key="key-1",
++        session=session,
++        dag_maker=dag_maker,
++    )
++    session.get(DagModel, "asset-event-consumer").set_scheduling_state("draining")
++    session.commit()
++
++    assert runner._create_dagruns_for_partitioned_asset_dags(session=session) == set()
++    session.refresh(apdr)
++    assert apdr.created_dag_run_id is None
++
++    session.get(DagModel, "asset-event-consumer").set_scheduling_state("active")
++    session.commit()
++
++    assert runner._create_dagruns_for_partitioned_asset_dags(session=session) == {"asset-event-consumer"}
+diff --git a/airflow-core/tests/unit/models/test_dag.py b/airflow-core/tests/unit/models/test_dag.py
+index 17fdac7b7b..0743f8f8e7 100644
+--- a/airflow-core/tests/unit/models/test_dag.py
++++ b/airflow-core/tests/unit/models/test_dag.py
+@@ -35,6 +35,7 @@ import pendulum
+ import pytest
+ import time_machine
+ from sqlalchemy import delete, func, inspect, select, update
++from sqlalchemy.exc import IntegrityError
+ 
+ from airflow import settings
+ from airflow._shared.module_loading import qualname
+@@ -100,7 +101,7 @@ from airflow.timetables.simple import (
+ from airflow.triggers.base import TriggerEvent
+ from airflow.utils.file import list_py_file_paths
+ from airflow.utils.session import create_session
+-from airflow.utils.state import DagRunState, State, TaskInstanceState
++from airflow.utils.state import DagRunState, DagSchedulingState, State, TaskInstanceState
+ from airflow.utils.types import DagRunTriggeredByType, DagRunType
+ 
+ from tests_common.test_utils.asserts import assert_queries_count
+@@ -967,6 +968,33 @@ class TestDag:
+         add_failed_dag_run(scheduler_dag, "2", TEST_DATE + timedelta(days=1))
+         assert session.get(DagModel, dag.dag_id).is_paused
+ 
++    def test_draining_dag_is_paused_after_limit(self, testing_dag_bundle):
++        dag_id = "dag_draining_paused_after_limit"
++        dag = DAG(dag_id, schedule=None, is_paused_upon_creation=False, max_consecutive_failed_dag_runs=2)
++        op1 = BashOperator(task_id="task", bash_command="exit 1;")
++        dag.add_task(op1)
++        session = settings.Session()
++        session.add(DagModel(dag_id=dag_id, bundle_name="testing", is_stale=False))
++        session.flush()
++        scheduler_dag = sync_dag_to_db(dag, session=session)
++        session.get(DagModel, dag_id).set_scheduling_state(DagSchedulingState.DRAINING)
++
++        for i in range(2):
++            self._add_dag_run(
++                scheduler_dag,
++                op1,
++                session,
++                f"run_{i}",
++                TEST_DATE + timedelta(days=i),
++                TEST_DATE + timedelta(days=i),
++                TaskInstanceState.FAILED,
++                DagRunState.FAILED,
++            )
++
++        dag_model = session.get(DagModel, dag_id)
++        assert dag_model.is_paused is True
++        assert dag_model.is_draining is False
++
+     @staticmethod
+     def _add_dag_run(scheduler_dag, op1, session, run_id, logical_date, run_after, ti_state, run_state):
+         """Create a dagrun, set the task-instance state, and call update_state.
+@@ -2565,6 +2593,23 @@ class TestDagModel:
+         session.rollback()
+         session.close()
+ 
++    def test_dags_needing_dagruns_excludes_draining(self, testing_dag_bundle, session):
++        for dag_id, state in (("active_dag", "active"), ("draining_dag", "draining")):
++            orm_dag = DagModel(
++                dag_id=dag_id,
++                bundle_name="testing",
++                next_dagrun=timezone.datetime(2020, 1, 1),
++                next_dagrun_create_after=timezone.datetime(2020, 1, 2),
++                is_stale=False,
++            )
++            orm_dag.set_scheduling_state(state)
++            session.add(orm_dag)
++        session.flush()
++
++        query, _ = DagModel.dags_needing_dagruns(session)
++
++        assert [dm.dag_id for dm in query] == ["active_dag"]
++
+     def test_dags_needing_dagruns_assets(self, dag_maker, session):
+         asset = Asset(uri="test://asset", group="test-group")
+         with dag_maker(
+@@ -4590,3 +4635,62 @@ def test_calculate_dagrun_date_fields(
+     assert dag_model.next_dagrun_create_after == next_run_after
+     assert dag_model.next_dagrun_partition_key == next_partition_key
+     assert dag_model.next_dagrun_partition_date == next_partition_date
++
++
++class TestDagSchedulingStateModel:
++    def test_enum_values(self):
++        assert {member.name: member.value for member in DagSchedulingState} == {
++            "ACTIVE": "active",
++            "DRAINING": "draining",
++            "PAUSED": "paused",
++        }
++
++    @pytest.fixture(autouse=True)
++    def clean(self):
++        clear_db_dags()
++        yield
++        clear_db_dags()
++
++    def test_is_draining_defaults_to_false(self, testing_dag_bundle, session):
++        session.add(DagModel(dag_id="default_dag", bundle_name="testing"))
++        session.flush()
++        session.expire_all()
++
++        assert session.get(DagModel, "default_dag").is_draining is False
++
++    @pytest.mark.parametrize(
++        ("is_paused", "is_draining", "expected"),
++        [
++            (False, False, DagSchedulingState.ACTIVE),
++            (True, False, DagSchedulingState.PAUSED),
++            (False, True, DagSchedulingState.DRAINING),
++        ],
++    )
++    def test_scheduling_state_property(self, is_paused, is_draining, expected):
++        dag_model = DagModel(dag_id="d", is_paused=is_paused, is_draining=is_draining)
++
++        assert dag_model.scheduling_state == expected
++
++    @pytest.mark.parametrize(
++        ("state", "expected_flags"),
++        [
++            (DagSchedulingState.ACTIVE, (False, False)),
++            (DagSchedulingState.DRAINING, (False, True)),
++            (DagSchedulingState.PAUSED, (True, False)),
++            ("draining", (False, True)),
++        ],
++    )
++    @pytest.mark.parametrize("initial", [(True, False), (False, True)])
++    def test_set_scheduling_state(self, initial, state, expected_flags):
++        dag_model = DagModel(dag_id="d", is_paused=initial[0], is_draining=initial[1])
++
++        dag_model.set_scheduling_state(state)
++
++        assert (dag_model.is_paused, dag_model.is_draining) == expected_flags
++
++    def test_database_rejects_paused_and_draining(self, testing_dag_bundle, session):
++        session.add(DagModel(dag_id="both_dag", bundle_name="testing", is_paused=True, is_draining=True))
++
++        with pytest.raises(IntegrityError):
++            session.flush()
++        session.rollback()
+diff --git a/airflow-core/tests/unit/models/test_dagrun.py b/airflow-core/tests/unit/models/test_dagrun.py
+index 0a3250c3c6..d8821678d5 100644
+--- a/airflow-core/tests/unit/models/test_dagrun.py
++++ b/airflow-core/tests/unit/models/test_dagrun.py
+@@ -1094,7 +1094,13 @@ class TestDagRun:
+ 
+         assert runs == [dr]
+ 
+-        orm_dag.is_paused = True
++        orm_dag.set_scheduling_state("draining")
++        session.merge(orm_dag)
++        session.commit()
++
++        assert fetch().all() == [dr]
++
++        orm_dag.set_scheduling_state("paused")
+         session.merge(orm_dag)
+         session.commit()
+ 
+diff --git a/airflow-ctl/src/airflowctl/api/datamodels/generated.py b/airflow-ctl/src/airflowctl/api/datamodels/generated.py
+index b7b97e5cd8..fc3d9d936c 100644
+--- a/airflow-ctl/src/airflowctl/api/datamodels/generated.py
++++ b/airflow-ctl/src/airflowctl/api/datamodels/generated.py
+@@ -449,17 +449,6 @@ class CreateAssetEventsBody(BaseModel):
+     access_control: AssetEventAccessControl | None = None
+ 
+ 
+-class DAGPatchBody(BaseModel):
+-    """
+-    Dag Serializer for updatable bodies.
+-    """
+-
+-    model_config = ConfigDict(
+-        extra="forbid",
+-    )
+-    is_paused: Annotated[bool, Field(title="Is Paused")]
+-
+-
+ class DAGRunClearBody(BaseModel):
+     """
+     Dag Run serializer for clear endpoint body.
+@@ -611,6 +600,19 @@ class DagScheduleAssetReference(BaseModel):
+     team_name: Annotated[str | None, Field(title="Team Name")] = None
+ 
+ 
++class DagSchedulingState(str, Enum):
++    """
++    Scheduling state of a Dag.
++
++    ``draining`` is transient: the scheduler stops creating new runs and moves the Dag to ``paused``
++    once its in-flight work has finished.
++    """
++
++    ACTIVE = "active"
++    DRAINING = "draining"
++    PAUSED = "paused"
++
++
+ class DagStatsStateResponse(BaseModel):
+     """
+     DagStatsState serializer for responses.
+@@ -1793,6 +1795,18 @@ class ConnectionCollectionResponse(BaseModel):
+     total_entries: Annotated[int, Field(title="Total Entries")]
+ 
+ 
++class DAGPatchBody(BaseModel):
++    """
++    Dag Serializer for updatable bodies.
++    """
++
++    model_config = ConfigDict(
++        extra="forbid",
++    )
++    is_paused: Annotated[bool | None, Field(title="Is Paused")] = None
++    scheduling_state: DagSchedulingState | None = None
++
++
+ class DAGResponse(BaseModel):
+     """
+     Dag serializer for responses.
+@@ -1801,6 +1815,7 @@ class DAGResponse(BaseModel):
+     dag_id: Annotated[str, Field(title="Dag Id")]
+     dag_display_name: Annotated[str, Field(title="Dag Display Name")]
+     is_paused: Annotated[bool, Field(title="Is Paused")]
++    scheduling_state: DagSchedulingState | None = "active"
+     is_stale: Annotated[bool, Field(title="Is Stale")]
+     last_parsed_time: Annotated[datetime | None, Field(title="Last Parsed Time")]
+     last_parse_duration: Annotated[float | None, Field(title="Last Parse Duration")]
+@@ -2672,6 +2687,7 @@ class DAGDetailsResponse(BaseModel):
+     dag_id: Annotated[str, Field(title="Dag Id")]
+     dag_display_name: Annotated[str, Field(title="Dag Display Name")]
+     is_paused: Annotated[bool, Field(title="Is Paused")]
++    scheduling_state: DagSchedulingState | None = "active"
+     is_stale: Annotated[bool, Field(title="Is Stale")]
+     last_parsed_time: Annotated[datetime | None, Field(title="Last Parsed Time")]
+     last_parse_duration: Annotated[float | None, Field(title="Last Parse Duration")]

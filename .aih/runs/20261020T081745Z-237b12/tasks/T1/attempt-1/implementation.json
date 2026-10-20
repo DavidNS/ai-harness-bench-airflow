@@ -1,0 +1,58 @@
+{
+  "criteria_notes": [
+    {
+      "criterion": "ACC1",
+      "note": "`DagSchedulingState` added in `utils/state.py`. Proven by `test_models/test_dag.py::TestDagSchedulingStateModel::test_enum_values`."
+    },
+    {
+      "criterion": "ACC2",
+      "note": "`DagModel.is_draining`, `scheduling_state` and `set_scheduling_state` added. Proven by `TestDagSchedulingStateModel`: `test_is_draining_defaults_to_false`, `test_scheduling_state_property`, `test_set_scheduling_state`, `test_database_rejects_paused_and_draining`."
+    },
+    {
+      "criterion": "ACC3",
+      "note": "Migration `0134_3_4_0_add_dag_is_draining.py` (rev `c4d9e7a3b165`, revises `f8c2a1d94e03`) adds the non-null `is_draining` column with server default, index and check constraint, plus the `backfill (dag_id, completed_at)` index. The model and `Backfill.__table_args__` match. `migrations-ref.rst` and the head map in `utils/db.py` are updated. `tests/unit/utils/test_db.py` passes. ERD files are not updated (see summary)."
+    },
+    {
+      "criterion": "ACC4",
+      "note": "`dags_needing_dagruns`, the three asset-event queueing paths and the pending partitioned-event query all exclude draining Dags. Tests: `test_dag.py::test_dags_needing_dagruns_excludes_draining`, `test_manager.py::test_register_asset_change_skips_draining_dag[direct/alias/name/uri]`, `test_scheduler_job.py::test_draining_dag_gets_no_partitioned_asset_dag_run`."
+    },
+    {
+      "criterion": "ACC5",
+      "note": "Production code needed no change here. Tests: `test_enqueue_task_instances_follows_scheduling_state` (draining queues like active, paused does not), `test_dagrun.py::test_next_dagruns_to_examine_only_unpaused` (a draining Dag's runs are still examined), `test_backfill_can_be_created_for_draining_dag`. Manual triggers needed no change and have no dedicated test."
+    },
+    {
+      "criterion": "ACC6",
+      "note": "`_finalize_draining_dags` added, ordered by `dag_id`, with limit and `with_row_locks(of=DagModel, skip_locked=True)`, registered every 5s. Tests: `test_finalize_draining_dags` (8 parametrized cases covering unfinished runs and backfills), `test_finalize_draining_dags_ignores_active_and_paused_dags`, `test_finalize_draining_dags_processes_in_dag_id_order_with_limit`, `test_finalize_draining_dags_locks_rows`, `test_scheduler_loop_registers_finalize_draining_dags`."
+    },
+    {
+      "criterion": "ACC7",
+      "note": "`dagrun.py` auto-pause now sets `is_paused=True, is_draining=False`. Test: `test_dag.py::test_draining_dag_is_paused_after_limit`."
+    },
+    {
+      "criterion": "ACC8",
+      "note": "`DAGResponse` and `DAGDetailsResponse` gain `scheduling_state`, default `active`. Tests: `datamodels/test_dags.py::TestSchedulingState`, plus the updated exact-shape assertions in `test_get_dag` and `test_dag_details`."
+    },
+    {
+      "criterion": "ACC9",
+      "note": "`DAGPatchBody` validates exactly one non-null field. `_get_target_scheduling_state` handles `update_mask` (400 for other masks, 422 when the mask names the other field). Bulk PATCH sets both flags. Tests: `test_patch_dag_scheduling_state`, `test_patch_dag_scheduling_state_invalid_body`, `test_patch_dags_scheduling_state`, `test_patch_dags_scheduling_state_invalid_body`, and `TestSchedulingState` in the datamodel tests."
+    },
+    {
+      "criterion": "ACC10",
+      "note": "Added the `scheduling_state` filter and `has_unfinished_runs`; dashboard `active_dag_count` excludes draining Dags. Tests: `ui/test_dags.py::test_scheduling_state_filter` (including `paused=false`), `test_has_unfinished_runs_ignores_dag_runs_limit`, and `test_dashboard.py::test_active_dag_count_excludes_draining_dags`."
+    },
+    {
+      "criterion": "ACC11",
+      "note": "`set_is_paused` now matches draining Dags for unpause and uses `set_scheduling_state`; `dags details` includes `scheduling_state` through `DAGResponse`. Tests: `test_pause_unpause_draining_dag` and `test_cli_get_dag_details_scheduling_state`."
+    },
+    {
+      "criterion": "ACC12",
+      "note": "Added a Dag draining section to `core-concepts/dags.rst`, an FAQ entry in `faq.rst`, and `newsfragments/22006.significant.rst`. No UI files changed."
+    },
+    {
+      "criterion": "ACC13",
+      "note": "Tests added or updated in the model, dagrun, scheduler, asset manager, datamodel, public and UI route, dashboard and CLI suites. Existing exact-shape assertions were updated."
+    }
+  ],
+  "replan_request": null,
+  "summary": "Implemented the draining state across the model, migration, scheduler, asset manager, public and UI APIs, CLI, docs and newsfragment. All nine listed test files pass (1328 passed, 10 skipped, 1 xfailed). I also ran `tests/unit/utils/test_db.py` for migration/model consistency (30 passed). Four gaps:\n- The ERD files (`airflow_erd.sha256`, `airflow_erd.svg`) are not updated. They don't exist under `airflow-core/docs/img` in this checkout, and the ERD is generated by a Sphinx extension that needs graphviz, which isn't installed here.\n- `api_fastapi/logging/decorators.py` is unchanged. The PATCH body is already merged into the audit-log extra, so `scheduling_state` is logged without a change.\n- I regenerated the OpenAPI specs and `airflowctl` datamodels by running their generators directly, not through prek (prek isn't installed).\n- Running the `airflowctl` codegen with `--no-dev` stripped the root venv and I restored it with `uv sync`."
+}

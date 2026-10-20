@@ -1,0 +1,242 @@
+{
+  "attempts_total": 1,
+  "base_sha": "e84b78e06706e0e63ec5c6d7034e6b4d3e44524a",
+  "delivery": null,
+  "gate_failures": [
+    {
+      "attempt": 1,
+      "codes": [
+        "plan.evidence_quote_not_found"
+      ],
+      "gate": "plan",
+      "task": null
+    }
+  ],
+  "head": "cf398f395bb16858bd9a6c974d582c5f3d2dd85b",
+  "human_decisions": [
+    {
+      "actor": "policy",
+      "decision": "approve",
+      "gate": "human.plan_approved"
+    }
+  ],
+  "models": [
+    "claude-sonnet-5-5"
+  ],
+  "plan_tasks": [
+    {
+      "files": [
+        "airflow-core/src/airflow/utils/state.py",
+        "airflow-core/src/airflow/models/dag.py",
+        "airflow-core/src/airflow/models/backfill.py",
+        "airflow-core/src/airflow/models/dagrun.py",
+        "airflow-core/src/airflow/migrations/versions/0134_3_4_0_add_dag_is_draining.py",
+        "airflow-core/src/airflow/utils/db.py",
+        "airflow-core/docs/migrations-ref.rst",
+        "airflow-core/docs/img/airflow_erd.sha256",
+        "airflow-core/docs/img/airflow_erd.svg",
+        "airflow-core/src/airflow/jobs/scheduler_job_runner.py",
+        "airflow-core/src/airflow/assets/manager.py",
+        "airflow-core/src/airflow/api_fastapi/common/parameters.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/datamodels/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/datamodels/ui/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/public/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dags.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/routes/ui/dashboard.py",
+        "airflow-core/src/airflow/api_fastapi/logging/decorators.py",
+        "airflow-core/src/airflow/api_fastapi/core_api/openapi/v2-rest-api-generated.yaml",
+        "airflow-core/src/airflow/api_fastapi/core_api/openapi/_private_ui.yaml",
+        "airflow-ctl/src/airflowctl/api/datamodels/generated.py",
+        "airflow-core/src/airflow/cli/commands/dag_command.py",
+        "airflow-core/docs/core-concepts/dags.rst",
+        "airflow-core/docs/faq.rst",
+        "airflow-core/newsfragments/22006.significant.rst",
+        "airflow-core/tests/unit/models/test_dag.py",
+        "airflow-core/tests/unit/models/test_dagrun.py",
+        "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+        "airflow-core/tests/unit/assets/test_manager.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py",
+        "airflow-core/tests/unit/cli/commands/test_dag_command.py"
+      ],
+      "id": "T1",
+      "key": "draining-state",
+      "tests": [
+        "airflow-core/tests/unit/models/test_dag.py",
+        "airflow-core/tests/unit/models/test_dagrun.py",
+        "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+        "airflow-core/tests/unit/assets/test_manager.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py",
+        "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dashboard.py",
+        "airflow-core/tests/unit/cli/commands/test_dag_command.py"
+      ]
+    }
+  ],
+  "plan_version": 1,
+  "run_dir": "/work/aih/runs/20261020T081745Z-237b12",
+  "run_id": "20261020T081745Z-237b12",
+  "schema_version": 1,
+  "sessions": 6,
+  "status": "implemented",
+  "tasks": [
+    {
+      "advisories": [
+        {
+          "file": "airflow-core/docs/img/airflow_erd.sha256",
+          "line": 0,
+          "pass": 1,
+          "severity": "advisory",
+          "text": "The ERD artefacts are not in the diff (the declared paths do not exist; the real ones are docs/apache-airflow/img/airflow_erd.*), so the ERD for is_draining and the backfill index is probably not regenerated."
+        },
+        {
+          "file": "airflow-core/tests/unit/jobs/test_scheduler_job.py",
+          "line": 1351,
+          "pass": 2,
+          "severity": "advisory",
+          "text": "No test shows that the unfinished runs of a draining Dag are still examined (_start_queued_dagruns or _schedule_dag_run); this holds by construction because is_paused stays false, so it is low risk."
+        }
+      ],
+      "attempts": 1,
+      "commit": "cf398f395bb16858bd9a6c974d582c5f3d2dd85b",
+      "coverage": [
+        {
+          "criterion": "ACC1",
+          "line": 4642,
+          "note": "The probe asserts the exact members and values and passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/models/test_aih_probe_x.py"
+          },
+          "probe_base": "does_not_build",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/models/test_dag.py::TestDagSchedulingStateModel::test_enum_values"
+        },
+        {
+          "criterion": "ACC2",
+          "line": 4694,
+          "note": "The probe covers the default, the property, the setter and the check-constraint IntegrityError, and passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/models/test_aih_probe_x.py"
+          },
+          "probe_base": "does_not_build",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/models/test_dag.py::TestDagSchedulingStateModel::test_database_rejects_paused_and_draining"
+        },
+        {
+          "criterion": "ACC4",
+          "line": 241,
+          "note": "The existing test is parametrized over direct, alias, name and uri; test_dags_needing_dagruns_excludes_draining and test_draining_dag_gets_no_partitioned_asset_dag_run cover the rest. My probes cover the direct reference and dags_needing_dagruns; both pass.",
+          "probe": {
+            "path": "airflow-core/tests/unit/assets/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/assets/test_manager.py::TestAssetManager::test_register_asset_change_skips_draining_dag"
+        },
+        {
+          "criterion": "ACC5",
+          "line": 1374,
+          "note": "The existing test is parametrized over active, draining and paused; test_backfill_can_be_created_for_draining_dag covers backfill. My probe covers enqueueing for a draining Dag and passes. Examination of unfinished runs has no dedicated test (advisory).",
+          "probe": {
+            "path": "airflow-core/tests/unit/jobs/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/jobs/test_scheduler_job.py::TestSchedulerJob::test_enqueue_task_instances_follows_scheduling_state"
+        },
+        {
+          "criterion": "ACC6",
+          "line": 1423,
+          "note": "The existing test is parametrized over run and backfill states; separate tests cover ordering and limit, row locks and registration every 5 seconds. My probe covers a busy Dag staying draining, a drained Dag becoming paused, and the drain_completed log, and passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/jobs/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/jobs/test_scheduler_job.py::TestSchedulerJob::test_finalize_draining_dags"
+        },
+        {
+          "criterion": "ACC7",
+          "line": 996,
+          "note": "My probe calls _check_last_n_dagruns_failed on a draining Dag and passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/models/test_aih_probe_x.py"
+          },
+          "probe_base": "does_not_build",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/models/test_dag.py::TestDag::test_draining_dag_is_paused_after_limit"
+        },
+        {
+          "criterion": "ACC8",
+          "line": 184,
+          "note": "My probe checks the default on both response models and the value in the PATCH responses, and passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/api_fastapi/core_api/datamodels/test_dags.py::TestSchedulingState::test_response_defaults_to_active"
+        },
+        {
+          "criterion": "ACC9",
+          "line": 1004,
+          "note": "My probe covers the 422 cases and the accepted explicit-null cases for both endpoints, the update_mask mismatch, and the flags set for every matched Dag by the bulk PATCH. It passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/api_fastapi/core_api/routes/public/test_dags.py::TestPatchDag::test_patch_dag_scheduling_state_invalid_body"
+        },
+        {
+          "criterion": "ACC10",
+          "line": 202,
+          "note": "My probe covers the scheduling_state filters, paused=false including draining Dags, has_unfinished_runs with dag_runs_limit=1, and the dashboard active count. It passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/api_fastapi/core_api/routes/ui/test_dags.py::TestGetDagRuns::test_has_unfinished_runs_ignores_dag_runs_limit"
+        },
+        {
+          "criterion": "ACC11",
+          "line": 666,
+          "note": "My probe covers pause and unpause of a draining Dag (each ends with draining cleared) and scheduling_state in the dags details JSON. It passes.",
+          "probe": {
+            "path": "airflow-core/tests/unit/cli/commands/test_aih_probe_x.py"
+          },
+          "probe_base": "fails",
+          "probe_outcome": "verified",
+          "status": "covered",
+          "test": "airflow-core/tests/unit/cli/commands/test_dag_command.py::TestCliDags::test_pause_unpause_draining_dag"
+        }
+      ],
+      "id": "T1",
+      "session_id": "1a0a2cea-271f-4a4a-99e4-e51f0f34ea69",
+      "status": "committed"
+    }
+  ],
+  "usage": {
+    "cache_creation_input_tokens": 363381.0,
+    "cache_read_input_tokens": 11638192.0,
+    "cost_usd": 3.655912,
+    "duration_ms": 2767089,
+    "input_tokens": 254.0,
+    "num_turns": 168,
+    "output_tokens": 103806.0
+  },
+  "worktree": "/work/aih/worktrees/20261020T081745Z-237b12"
+}
